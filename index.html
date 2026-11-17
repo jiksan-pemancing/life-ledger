@@ -1,0 +1,912 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="A life and money simulator: live from 18 to old age, one month at a time.">
+<meta name="theme-color" content="#171f29">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Life Ledger">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Life Ledger</title>
+<style>
+:root{--bg:#0e1319;--panel:#171f29;--line:#2a3644;--text:#e7edf3;--muted:#8a97a6;--accent:#4cc38a;--warn:#f0b43c;--bad:#ef5b5b;--btn:#223040}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,"Segoe UI",Roboto,sans-serif}
+#hud{position:sticky;top:0;z-index:20;display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+#hud h1{font-size:16px;margin:0 6px 0 0}
+.st span{display:block;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.st b{font-size:15px}
+.meter{width:72px;height:6px;background:var(--bg);border-radius:3px;overflow:hidden;margin-top:4px}
+.meter i{display:block;height:100%}
+.hud-r{margin-left:auto;display:flex;gap:6px}
+button{background:var(--btn);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:6px 11px;cursor:pointer;font:inherit}
+button:hover:not(:disabled){border-color:var(--accent)}
+button.on,button.pri{background:var(--accent);color:#06130d;border-color:var(--accent);font-weight:600}
+button:disabled{opacity:.4;cursor:not-allowed}
+#stage{position:relative;max-width:1400px;margin:0 auto}
+#scene{display:block;width:100%;height:auto;max-height:64vh;background:#7fb8e6}
+.bld{cursor:pointer;transition:filter .15s}
+.bld:hover{filter:brightness(1.12) drop-shadow(0 0 6px rgba(255,255,255,.65))}
+.bld.sel{filter:drop-shadow(0 0 7px rgba(76,195,138,.95))}
+.lbl text{font:600 11px system-ui,sans-serif;fill:#fff}
+@keyframes drift{from{transform:translateX(-260px)}to{transform:translateX(1260px)}}
+.cloud{animation:drift linear infinite}
+@keyframes carR{from{transform:translateX(-80px)}to{transform:translateX(1080px)}}
+@keyframes carL{from{transform:translateX(1080px)}to{transform:translateX(-80px)}}
+.carR{animation:carR linear infinite}.carL{animation:carL linear infinite}
+@keyframes fall{from{transform:translateY(-30px)}to{transform:translateY(470px)}}
+.fall{animation:fall linear infinite}
+@keyframes rise{0%{transform:translateY(6px);opacity:0}15%{opacity:1}100%{transform:translateY(-50px);opacity:0}}
+.rise{animation:rise 2.2s ease-out forwards}
+@keyframes puff{0%{transform:translate(0,0);opacity:.7}100%{transform:translate(10px,-40px);opacity:0}}
+.puff{animation:puff 3s ease-out infinite}
+@keyframes blink{50%{opacity:.35}}
+.blink{animation:blink 1s step-end infinite}
+#toasts{position:absolute;top:10px;left:10px;display:flex;flex-direction:column;gap:6px;max-width:min(420px,80%);pointer-events:none}
+.toast{background:rgba(14,19,25,.9);border:1px solid var(--line);border-radius:10px;padding:7px 11px;font-size:13px;animation:tin .25s ease-out}
+@keyframes tin{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+#below{max-width:1400px;margin:0 auto;padding:12px 14px 96px;display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.card h3{margin:0 0 8px;font-size:14px}
+#panel{position:fixed;z-index:30;top:0;right:0;bottom:56px;width:min(460px,100%);background:var(--panel);border-left:1px solid var(--line);overflow:auto;transform:translateX(105%);transition:transform .22s ease-out;padding:0 14px 24px;box-shadow:-10px 0 30px rgba(0,0,0,.35)}
+#panel.open{transform:none}
+#panel .ph{position:sticky;top:0;background:var(--panel);display:flex;align-items:center;justify-content:space-between;padding:12px 0 8px;border-bottom:1px solid var(--line);margin-bottom:10px;z-index:1}
+#panel h2{font-size:17px;margin:0}
+#panel h3{font-size:14px;margin:16px 0 6px}
+#hud{padding-top:max(8px,env(safe-area-inset-top))}
+#controls{position:fixed;z-index:25;bottom:0;left:0;right:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center;padding:9px 12px max(9px,env(safe-area-inset-bottom));background:var(--panel);border-top:1px solid var(--line)}
+table{width:100%;border-collapse:collapse}
+td,th{padding:4px 3px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;vertical-align:top}
+th{color:var(--muted);font-weight:500}
+td.n,th.n{text-align:right;white-space:nowrap}
+.muted{color:var(--muted);font-size:12.5px}
+.good{color:var(--accent)}.bad{color:var(--bad)}.warn{color:var(--warn)}
+input[type=range]{width:140px;vertical-align:middle}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
+.row>label:first-child{min-width:120px;color:var(--muted)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:12px}
+.opts{display:flex;gap:4px;flex-wrap:wrap}
+.opts button{padding:4px 8px;font-size:12.5px}
+.log div{padding:3px 0;border-bottom:1px dashed var(--line);font-size:12.5px}
+.log{max-height:260px;overflow:auto}
+#modal{position:fixed;inset:0;z-index:50;background:rgba(5,8,12,.55);display:none;align-items:center;justify-content:center;padding:16px}
+#modal.show{display:flex}
+#modal .box{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;max-width:580px;width:100%;max-height:90vh;overflow:auto}
+#modal h2{margin:6px 0 8px;font-size:19px}
+.big{font-size:42px;line-height:1}
+.choice{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.choice button{text-align:left;padding:10px 12px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:12px}
+.grid3 button{padding:12px;text-align:left}
+.chart{display:block;width:100%;height:auto;background:var(--bg);border-radius:8px}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:12px;margin-top:4px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+@media (max-width:700px){#stage{overflow-x:auto;-webkit-overflow-scrolling:touch}#scene{width:760px;max-width:none}#toasts{position:fixed;top:120px}#panel{top:auto;bottom:100px;height:66vh;width:100%;border-left:0;border-top:1px solid var(--line);border-radius:14px 14px 0 0;transform:translateY(105%)}#panel.open{transform:none}.hud-r{margin-left:0}#scene{max-height:none}}
+</style>
+</head>
+<body>
+<header id="hud"></header>
+<div id="stage">
+<svg id="scene" viewBox="0 0 1000 440" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Your town">
+ <g id="g-sky"></g><g id="g-sun"></g><g id="g-clouds" pointer-events="none"></g><g id="g-hills"></g>
+ <g id="g-school"></g><g id="g-work"></g><g id="g-bank"></g><g id="g-home"></g><g id="g-exch"></g><g id="g-clinic"></g><g id="g-park"></g>
+ <g id="g-street"></g><g id="g-people"></g><g id="g-car"></g><g id="g-traffic" pointer-events="none"></g>
+ <g id="g-weather" pointer-events="none"></g><g id="g-gloom" pointer-events="none"></g><g id="g-fx" pointer-events="none"></g>
+</svg>
+<div id="toasts"></div>
+</div>
+<div id="below"></div>
+<aside id="panel"></aside>
+<footer id="controls"></footer>
+<div id="modal"></div>
+<script>
+'use strict';
+/* ================= helpers ================= */
+const $=id=>document.getElementById(id);
+const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
+const sum=o=>Object.values(o).reduce((a,b)=>a+b,0);
+function randn(){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v)}
+function tdist(df){let c=0;for(let i=0;i<df;i++){const z=randn();c+=z*z}return randn()/Math.sqrt(c/df)/Math.sqrt(df/(df-2))}
+function money(n){const a=Math.abs(n),s=n<0?'-':'';if(a>=1e6)return s+'$'+(a/1e6).toFixed(2)+'M';if(a>=1e4)return s+'$'+Math.round(a/1e3)+'k';if(a>=1e3)return s+'$'+(a/1e3).toFixed(1)+'k';return s+'$'+Math.round(a)}
+const pct=(x,d)=>(x*100).toFixed(d===undefined?1:d)+'%';
+const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const SEASON=m=>(m===11||m<=1)?'winter':m<=4?'spring':m<=7?'summer':'autumn';
+
+/* ================= data ================= */
+const ASSETS=[
+ {k:'cash',name:'Cash in account',fee:0,note:'Safe, but interest lags inflation.'},
+ {k:'bondG',name:'Government bonds',fee:.0015,note:'Steady; prices fall when rates rise.'},
+ {k:'bondC',name:'Corporate bonds',fee:.002,note:'Higher yield; hurt in recessions.'},
+ {k:'stocks',name:'Stock index fund',fee:.001,note:'Big swings; 30-50% crashes happen.'},
+ {k:'picks',name:'Individual stocks',fee:.004,note:'Far riskier than the index.'},
+ {k:'reit',name:'Real estate fund',fee:.003,note:'Rent income plus property cycles.'},
+ {k:'gold',name:'Gold',fee:.004,note:'Crisis hedge; long flat stretches.'},
+ {k:'crypto',name:'Crypto',fee:.01,note:'Extreme boom and bust.'}
+];
+const DIV={stocks:.02,picks:.015,reit:.035};
+const PRESETS={'All cash':{},'Conservative':{bondG:30,bondC:15,stocks:25,gold:5},'Balanced':{bondG:15,bondC:10,stocks:50,reit:10,gold:5},'Aggressive':{stocks:70,picks:10,reit:10,crypto:5,gold:5},'Gambler':{picks:40,crypto:60}};
+const REG={
+ expansion:{name:'Expansion',mu:.10,vol:.13,jl:.03,infl:.025,rate:.040,hire:.88,dur:54,next:[['slowdown',.8],['recession',.2]],bonus:1.2,traffic:6},
+ slowdown:{name:'Slowdown',mu:.03,vol:.17,jl:.07,infl:.030,rate:.035,hire:.70,dur:10,next:[['expansion',.4],['recession',.6]],bonus:.8,traffic:4},
+ recession:{name:'Recession',mu:-.16,vol:.27,jl:.17,infl:.012,rate:.015,hire:.42,dur:12,next:[['recovery',1]],bonus:.3,traffic:2},
+ recovery:{name:'Recovery',mu:.17,vol:.19,jl:.08,infl:.020,rate:.020,hire:.72,dur:16,next:[['expansion',.8],['slowdown',.2]],bonus:1,traffic:4}
+};
+const FIELDS={
+ service:{name:'Retail & Service',edu:0,start:28000,g:.005,stab:1.1,sat:-1,bonus:.02},
+ trades:{name:'Skilled Trades',edu:0,start:38000,g:.012,stab:.9,sat:0,bonus:.03},
+ public:{name:'Public Service',edu:1,start:45000,g:.008,stab:.5,sat:1,bonus:0},
+ health:{name:'Healthcare',edu:2,start:62000,g:.015,stab:.6,sat:1,bonus:.04},
+ tech:{name:'Technology',edu:2,start:72000,g:.025,stab:1.2,sat:0,bonus:.10},
+ finance:{name:'Finance',edu:2,start:78000,g:.028,stab:1.3,sat:-1,bonus:.18}
+};
+const SHIRT={service:'#e0784a',trades:'#e8b23a',public:'#4a7ec2',health:'#5ec4b6',tech:'#7a5af0',finance:'#2b3a55'};
+const EDU=[{n:'No degree',cost:0,years:0},{n:'Vocational certificate',cost:9000,years:2},{n:'University degree',cost:18000,years:4}];
+const SIDE=[
+ {k:'none',n:'No side gig',h:0,pay:0,req:0},
+ {k:'shop',n:'Weekend shop shifts',h:8,pay:13,req:0},
+ {k:'delivery',n:'Delivery driving',h:10,pay:16,req:0,needCar:true},
+ {k:'tutor',n:'Tutoring',h:5,pay:32,req:1},
+ {k:'freelance',n:'Freelance projects',h:10,pay:48,req:2,skill:40,vol:.5}
+];
+const BUD={
+ food:{n:'Groceries',opts:[['Budget',250,-2,-.02],['Normal',380,0,0],['Premium',600,2,.02]]},
+ phone:{n:'Phone & internet',opts:[['Basic',40,-.5],['Standard',80,0],['Premium',150,1]]},
+ transport:{n:'Transport',opts:[['Transit & bike',90,-1],['Used car',450,.5],['New car',900,2]]},
+ clothing:{n:'Clothing',opts:[['Minimal',40,-1],['Normal',90,0],['Fashion',250,1.5]]},
+ fun:{n:'Fun & dining out',opts:[['Homebody',60,-3],['Social',250,1],['Big spender',700,3.5]]},
+ travel:{n:'Travel',opts:[['None',0,-1],['Yearly trip',2500,2],['Lavish trips',8000,4]]},
+ misc:{n:'Household & extras',opts:[['Lean 4%',.04,-1.5],['Typical 10%',.10,0],['Generous 18%',.18,1.5]]}
+};
+const SUBS=[
+ {k:'stream',n:'Streaming bundle',c:18,h:.6},{k:'music',n:'Music',c:11,h:.3},{k:'gym',n:'Gym',c:45,h:.4},
+ {k:'meal',n:'Meal kits',c:220,h:.8},{k:'cloud',n:'Cloud & apps',c:12,h:.1},{k:'news',n:'News',c:14,h:.1},{k:'box',n:'Mystery box club',c:35,h:.15}
+];
+const RENT=[{n:'Shared flat',r:460,h:-2,util:80},{n:'Own apartment',r:875,h:0,util:120},{n:'Nice apartment',r:1420,h:1.5,util:160},{n:'Luxury flat',r:2330,h:3,util:220}];
+const HOMES=[{n:'Starter home',p:150000,util:180,h:2},{n:'Family home',p:280000,util:250,h:3,room:true},{n:'Dream home',p:500000,util:380,h:4.5,room:true}];
+const MORT={
+ fix30:{n:'30-year fixed',margin:.026,desc:'The rate never changes. Higher rate, no exit penalty.'},
+ fix5:{n:'5-year fixed',margin:.018,desc:'A lower rate locked for 5 years, then it jumps to the standard variable rate unless you remortgage. 3% exit charge during the fix.'},
+ variable:{n:'Variable tracker',margin:.019,desc:'Follows the base rate every month. Cheap when rates fall, painful when they rise. No penalties.'}
+};
+const SVR_MARGIN=.035;
+const WELL=[{n:'None',c:0,h:0},{n:'Some (gym, checkups)',c:125,h:.9},{n:'Serious (coach, prevention)',c:330,h:2}];
+const TEMPT=[
+ {t:'Ski trip',icon:'🎿',text:c=>'Friends invite you on a ski trip. It costs '+money(c)+'.',c:1800,yes:[4,6],no:[-1,2],yl:'Go skiing',nl:'Skip it'},
+ {t:'New phone',icon:'📱',text:c=>'The new flagship phone just launched at '+money(c)+'. Yours still works fine.',c:1200,yes:[2,4],yl:'Buy it',nl:'Keep my phone'},
+ {t:'Friend needs money',icon:'🤝',text:c=>'A friend asks to borrow '+money(c)+' and promises to repay within a year.',c:2000,kind:'lend',yl:'Lend it',nl:'Say no',no:[-2,3]},
+ {t:'Hot stock tip',icon:'📈',text:c=>'A coworker swears a tiny company will triple, and wants you to put in '+money(c)+'.',c:5000,kind:'tip',yl:'Invest',nl:'Pass'},
+ {t:'Designer sale',icon:'👜',text:c=>'A designer sale: '+money(c)+' of things you want but do not need.',c:600,yes:[1,3],yl:'Treat myself',nl:'Walk away'},
+ {t:'Lifestyle upgrade',icon:'🛋️',text:c=>'Your friends all have new furniture. A full upgrade would cost '+money(c)+'.',c:4000,yes:[3,8],no:[-1,3],yl:'Upgrade',nl:'Not now'}
+];
+const INC_N={salary:'Salary',bonus:'Bonus',side:'Side gig',room:'Room rent',dividends:'Dividends',pension:'Pension',benefit:'Unemployment benefit',partner:'Partner income',windfall:'Windfalls & refunds'};
+const EX_N={misc:'Household & extras',housing:'Housing',utilities:'Utilities',food:'Groceries',phone:'Phone & internet',transport:'Transport',clothing:'Clothing',fun:'Fun & dining',travel:'Travel',subs:'Subscriptions',kids:'Children',holidays:'Holidays & gifts',insurance:'Health insurance',medical:'Medical',wellness:'Wellness',training:'Training',care:'Parent care',debt:'Debt payments',events:'Bills & surprises'};
+const KEY='life-ledger-v2';
+
+/* ================= state ================= */
+let S,runTimer=null,toastQ=[];
+const C={};
+function zeroAcct(){const o={};ASSETS.forEach(a=>o[a.k]=0);return o}
+function zeroYtd(){return {wage:0,bonus:0,side:0,pension:0,benefit:0,room:0,contrib:0,gains:0,withheld:0}}
+function drawDeathAge(){return clamp(Math.random()<.8?85+8*randn():72+9*randn(),60,120)}
+function fresh(){
+ return {v:2,phase:'start',panel:null,ageM:216,month:8,pi:1,rel:{food:1,housing:1,energy:1,goods:1,health:1},reIdx:1,reMom:0,
+  regime:'expansion',regM:0,infl:.025,rate:.04,volMult:1,lastZ:0,lastRet:null,deathM:drawDeathAge()*12,
+  cash:3000,taxable:zeroAcct(),retire:zeroAcct(),alloc:{bondG:10,bondC:5,stocks:60,picks:0,reit:5,gold:5,crypto:0},reinvest:true,rebal:false,
+  debt:{student:0,card:0},edu:0,studying:false,eduLeftM:0,eduTarget:0,
+  field:null,level:0,skill:10,salary:0,lastSalary:0,employed:false,unempM:0,probation:0,applies:0,
+  retired:false,careerSum:0,workM:0,work:'coast',side:'none',
+  home:{own:false},rentTier:0,rentPay:RENT[0].r,leaseM:12,roomLet:false,down:.2,mortPick:'fix30',mortTerm:30,
+  partner:null,dating:false,trying:false,kids:[],care:0,health:88,happy:62,mood:[],
+  budget:{food:1,phone:1,transport:0,clothing:1,fun:1,travel:0,misc:1},subs:{stream:true},incEst:0,
+  insured:true,wellness:0,contribPct:5,emergencyMonths:3,payDebt:true,investSurplus:true,pauseOnEvents:true,
+  ytd:zeroYtd(),taxDue:null,lastYearTax:null,coreExp:1500,
+  last:null,log:[],hist:[3000],mkt:{stocks:[100],bonds:[100],home:[100],gold:[100],crypto:[100]},regH:['expansion'],
+  stats:{happy:0,health:0,stressM:0,months:0},bankrupt:0,stressNow:false,pend:[],decision:null,dq:[],fxEmoji:'',medNow:false,rain:false};
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function load(){try{const r=localStorage.getItem(KEY);return r?JSON.parse(r):null}catch(e){return null}}
+function say(t){S.log.unshift(MONTHS[S.month]+' · age '+Math.floor(S.ageM/12)+': '+t);S.log=S.log.slice(0,150)}
+function pushToast(t){toastQ.push({t,at:Date.now()});toastQ=toastQ.slice(-4)}
+function addMood(v,m,t){S.mood.push({v,m,t:t||''})}
+function after(){save();render()}
+function nw(){return S.cash+sum(S.taxable)+sum(S.retire)+(S.home.own?S.home.value-S.home.mort:0)-S.debt.student-S.debt.card}
+const ageY=()=>Math.floor(S.ageM/12);
+
+/* ================= economy ================= */
+function econMonth(){
+ const ev=[];let shock=false;
+ S.regM++;
+ if(S.regime!=='recession'&&Math.random()<.008/12){shock=true;S.regime='recession';S.regM=0;ev.push(['🌍 Global shock: markets plunge and the economy tips into recession.',2])}
+ else if(Math.random()<1/REG[S.regime].dur){const r=Math.random();let acc=0;for(const [to,p] of REG[S.regime].next){acc+=p;if(r<acc){S.regime=to;break}}S.regM=0;ev.push(['📰 The economy moved into '+REG[S.regime].name.toLowerCase()+'.',1])}
+ const R=REG[S.regime],pRate=S.rate;
+ S.infl=clamp(.94*S.infl+.06*R.infl+randn()*.002,-.01,.15);
+ S.pi*=1+S.infl/12;
+ for(const k in S.rel)S.rel[k]=clamp(S.rel[k]*(1+randn()*.003)+(1-S.rel[k])*.02,.7,1.8);
+ if(Math.random()<.004){S.rel.energy*=1.35;ev.push(['⛽ Energy prices spike: utilities and transport cost more for a while.',1])}
+ S.rate=clamp(.93*S.rate+.07*(R.rate+.5*(S.infl-.025))+randn()*.0008,.002,.12);
+ const z=tdist(4);
+ S.volMult=clamp(.88*S.volMult+.12+.1*(Math.abs(z)-.75),.7,2.5);S.lastZ=z;
+ let M=R.mu/12+R.vol/Math.sqrt(12)*S.volMult*z;if(shock)M-=.15;M=Math.max(-.35,M);
+ const dr=S.rate-pRate,g=(pRate+.01)/12-7*dr+randn()*.003;
+ S.reMom=.7*S.reMom+.3*((S.infl+.01)/12+.3*M-3*dr+randn()*.012);
+ const reRet=clamp(S.reMom,-.08,.08);S.reIdx*=1+reRet;
+ const ret={cash:S.rate*.6/12,bondG:g,bondC:g+.0015+.25*M+randn()*.004,stocks:M,picks:1.25*M+tdist(4)*.08,reit:reRet+.035/12,gold:(S.infl+.005)/12-.12*M+tdist(4)*.04,crypto:clamp(1.2*M+tdist(4)*.16,-.6,1.5)};
+ for(const k in ret)ret[k]=Math.max(-.9,ret[k]);
+ S.lastRet=ret;
+ const m=S.mkt,push=(a,r)=>a.push(a[a.length-1]*(1+r));
+ push(m.stocks,ret.stocks);push(m.bonds,ret.bondG);push(m.home,reRet);push(m.gold,ret.gold);push(m.crypto,ret.crypto);
+ S.regH.push(S.regime);
+ return {ret,reRet,ev};
+}
+function incomeTax(x,pi){const r=Math.max(0,x/pi);let t=0,lo=0;for(const [hi,rate] of [[12000,0],[45000,.15],[110000,.28],[Infinity,.38]]){if(r>lo)t+=(Math.min(r,hi)-lo)*rate;lo=hi}return t*pi}
+function annuity(b,r,n){n=Math.max(1,n);const i=r/12;return i<=0?b/n:b*i/(1-Math.pow(1+i,-n))}
+function hireChance(){return REG[S.regime].hire*(ageY()>=58?.7:1)}
+function pensionAnnual(){const avg=S.workM?S.careerSum/S.workM:0;return .4*avg*S.pi*Math.min(1,S.workM/420)}
+function monthlyGross(){return ((S.employed?S.salary:0)+(S.partner&&S.partner.employed?S.partner.salary:0)+(S.retired?pensionAnnual():0))/12}
+function newRate(p,ex){return Math.max(.02,S.rate+MORT[p].margin+(ex||0))}
+function affordable(b,r,n){const g=monthlyGross();return g>0&&annuity(b,r+.03,n)<=.4*g}
+function marketRent(){return RENT[S.rentTier].r*S.pi*S.rel.housing}
+function inFix(){const h=S.home;return !!(h.own&&h.product==='fix5'&&S.ageM<h.fixEnd)}
+function sideOk(g){if(g.k==='none')return true;if(S.edu<g.req)return false;if(g.skill&&S.skill<g.skill)return false;if(g.needCar&&S.budget.transport<1)return false;return true}
+function subsHappy(){const s=SUBS.filter(x=>S.subs[x.k]).reduce((a,x)=>a+x.h,0);return 2*(1-Math.exp(-s/2))}
+function costOf(k,i){
+ const pi=S.pi,rel=S.rel,ad=S.partner?2:1,nk=S.kids.length,st=S.studying,o=BUD[k].opts[i];
+ if(k==='food')return (o[1]*ad+150*nk*[.8,1,1.4][i])*pi*rel.food*(st?.6:1);
+ if(k==='transport')return o[1]*pi*rel.energy*(S.side==='delivery'?1.15:1);
+ if(k==='clothing')return o[1]*pi*rel.goods*(1+.3*nk);
+ if(k==='travel')return o[1]*pi*rel.goods*(1+.8*(ad-1)+.5*nk)/12;
+ if(k==='misc')return Math.max(150*pi*ad,(S.incEst||0)*o[1]);
+ return o[1]*pi*rel.goods;
+}
+
+/* ================= accounts ================= */
+function cashPct(){return Math.max(0,100-sum(S.alloc))}
+function addTo(acc,x){if(x<=0)return;const cp=cashPct();for(const a of ASSETS)S[acc][a.k]+=x*(a.k==='cash'?cp:S.alloc[a.k])/100}
+function rebalance(acc){
+ const A=S[acc],total=sum(A);if(total<=0)return;let turn=0;
+ for(const a of ASSETS){const t=total*(a.k==='cash'?cashPct():S.alloc[a.k])/100;turn+=Math.abs(t-A[a.k]);A[a.k]=t}
+ const f=1-(turn/2*.002)/total;for(const a of ASSETS)A[a.k]*=f;
+}
+function coverDeficit(need){
+ const t=sum(S.taxable),take=Math.min(t,need);
+ if(take>0){const f=1-take/t;for(const a of ASSETS)S.taxable[a.k]*=f;need-=take}
+ if(need>.5){
+  const r=sum(S.retire),open=ageY()>=60||S.retired;
+  if(r>0&&(open||S.debt.card>24*S.coreExp)){const rate=open?.2:.35,gross=Math.min(r,need/(1-rate)),f=1-gross/r;for(const a of ASSETS)S.retire[a.k]*=f;need-=gross*(1-rate)}
+ }
+ if(need>.5){S.debt.card+=need;S.stressNow=true}
+}
+function spendNow(x){if(S.cash>=x)S.cash-=x;else{const r=x-S.cash;S.cash=0;coverDeficit(r)}}
+
+/* ================= decisions ================= */
+function pushDecision(d){if(S.decision)S.dq.push(d);else S.decision=d}
+function busy(){return !!S.decision||S.dq.length>0}
+function offerJob(ev){
+ if(busy())return;
+ const up=.05+Math.random()*.12;
+ pushDecision({title:'Job offer',icon:'💼',text:'A rival employer in '+FIELDS[S.field].name+' offers you '+money(S.salary*(1+up))+'/yr (+'+pct(up,0)+'). New jobs come with 6 months of probation, when layoffs are more likely.',opts:[{l:'Accept the offer',a:'acceptJob',d:{up}},{l:'Stay where I am',a:'decline'}]});
+ ev.push(['💼 You received a job offer.',2]);
+}
+function tempt(ev){
+ if(busy())return;
+ const i=Math.floor(Math.random()*TEMPT.length),T=TEMPT[i],c=T.c*S.pi;
+ pushDecision({title:T.t,icon:T.icon,text:T.text(c),neutral:true,opts:[{l:T.yl+' ('+money(c)+')',a:'tempt',d:{i,c}},{l:T.nl,a:'temptNo',d:{i}}]});
+ ev.push([T.icon+' '+T.t+': a decision is waiting.',2]);
+}
+function remortgageDecision(){
+ const h=S.home;
+ pushDecision({title:'Your fixed rate has ended',icon:'🏦',text:'You are now on the standard variable rate of '+pct(h.rate,2)+' ('+money(h.pmt)+'/mo). Remortgaging costs '+money(1000*S.pi)+' and you must pass the lender\'s stress test.',
+  opts:['fix5','fix30','variable'].map(p=>({l:MORT[p].n+' at '+pct(newRate(p,h.extra),2)+' ('+money(annuity(h.mort,newRate(p,h.extra),h.termM))+'/mo)',a:'remort',d:{p},dis:!affordable(h.mort,newRate(p,h.extra),h.termM)})).concat([{l:'Stay on the variable rate',a:'decline'}])});
+}
+const ACT={
+ decline(){},
+ acceptJob(d){S.salary*=1+d.up;S.lastSalary=S.salary;S.probation=6;say('You accepted the new job at '+money(S.salary)+'/yr.')},
+ tempt(d){const T=TEMPT[d.i],c=d.c;spendNow(c);
+  if(T.kind==='lend'){if(Math.random()<.55)S.pend.push({kind:'repay',m:3+Math.floor(Math.random()*10),amt:c});addMood(1,3,'Helped a friend')}
+  else if(T.kind==='tip'){const win=Math.random()<.25;S.pend.push({kind:'tip',m:6,win,amt:win?c*3:c*.2})}
+  else addMood(T.yes[0],T.yes[1],T.t);
+  say(T.t+': you said yes ('+money(c)+').')},
+ temptNo(d){const T=TEMPT[d.i];if(T.no)addMood(T.no[0],T.no[1],'Missed out');say(T.t+': you said no.')},
+ remort(d){remortgage(d.p,true)},
+ downsize(){sellHome(true);S.rentTier=1;S.rentPay=marketRent();say('You sold your home and moved into a rented apartment.')}
+};
+function decide(i){
+ const d=S.decision;if(!d)return;const o=d.opts[i];if(o.dis)return;
+ S.decision=null;ACT[o.a](o.d||{});
+ if(!S.decision&&S.dq.length)S.decision=S.dq.shift();
+ after();
+}
+
+/* ================= life events ================= */
+function resolvePending(ev){
+ S.pend.forEach(p=>p.m--);
+ const due=S.pend.filter(p=>p.m<=0);S.pend=S.pend.filter(p=>p.m>0);
+ for(const p of due){
+  if(p.kind==='birth'){S.kids.push(0);addMood(6,12,'New baby');spendNow(4000*S.pi*(S.insured?.25:1));ev.push(['👶 Your baby was born!',2])}
+  else if(p.kind==='repay'){S.cash+=p.amt;ev.push(['🤝 Your friend paid back '+money(p.amt)+'.',1])}
+  else if(p.kind==='tip'){S.cash+=p.amt;ev.push(p.win?['🚀 The hot stock tip paid off: '+money(p.amt)+'!',2]:['📉 The hot stock tip collapsed. You got back '+money(p.amt)+'.',2])}
+ }
+}
+function divorce(ev){
+ const had=S.home.own;if(had)sellHome(true);
+ S.cash*=.5;for(const a of ASSETS){S.taxable[a.k]*=.5;S.retire[a.k]*=.5}
+ S.partner=null;S.trying=false;addMood(-12,12,'Divorce');
+ ev.push(['💔 Divorce: your assets were split in half'+(had?' and the home was sold.':'.'),2]);
+}
+function meetPartner(ev){
+ S.partner={salary:(S.salary>0?S.salary:35000*S.pi)*(.5+Math.random()*.7),employed:true,since:S.ageM};S.dating=false;addMood(5,12,'New relationship');
+ ev.push(['💞 You met someone special and moved in together.',2]);
+}
+function graduate(ev){
+ S.studying=false;S.edu=S.eduTarget;S.field=null;S.employed=false;S.panel='work';
+ ev.push(['🎓 You graduated: '+EDU[S.edu].n+'. Time to find a job.',2]);
+}
+function mortgageMonth(ev){
+ const h=S.home;if(!h.own||h.mort<=0)return 0;
+ if(h.product==='variable'){h.rate=Math.max(.01,S.rate+MORT.variable.margin+h.extra);h.pmt=annuity(h.mort,h.rate,h.termM)}
+ else if(h.product==='svr'){h.rate=Math.max(.02,S.rate+SVR_MARGIN+h.extra);h.pmt=annuity(h.mort,h.rate,h.termM)}
+ else if(h.product==='fix5'&&S.ageM>=h.fixEnd){h.product='svr';h.rate=Math.max(.02,S.rate+SVR_MARGIN+h.extra);h.pmt=annuity(h.mort,h.rate,h.termM);ev.push(['🏦 Your 5-year fix ended: your rate jumped to '+pct(h.rate,2)+'.',2]);remortgageDecision()}
+ const int=h.mort*h.rate/12,pay=Math.min(h.pmt,h.mort+int);
+ h.mort=h.mort+int-pay;h.termM=Math.max(1,h.termM-1);
+ if(h.mort<1){h.mort=0;h.pmt=0;addMood(4,12,'Mortgage-free');ev.push(['🎉 Your mortgage is paid off!',2])}
+ return pay+(h.mort>.8*h.value?.006/12*h.mort:0);
+}
+function yearTax(){
+ const y=S.ytd,pi=S.pi,earned=y.wage+y.bonus+y.side;
+ const actual=incomeTax(earned+y.pension+y.benefit+y.room-y.contrib,pi)+.07*Math.min(earned,150000*pi)+.15*Math.max(0,y.gains);
+ S.taxDue=actual-y.withheld;S.lastYearTax={actual,withheld:y.withheld,earned};S.ytd=zeroYtd();
+}
+
+/* ================= the monthly tick ================= */
+function tick(){
+ if(S.phase!=='play'||S.decision)return {major:false,notable:false};
+ const ev=[],E=econMonth();ev.push(...E.ev);
+ const pi=S.pi,age=ageY(),mo=S.month,R=REG[S.regime],B=S.budget,se=SEASON(mo);
+ S.applies=0;S.medNow=false;S.rain=(se==='spring'||se==='autumn')&&Math.random()<.35;
+ if(mo===0&&S.home.own)S.home.overYTD=0;
+ /* investment returns */
+ let divPaid=0;
+ for(const acc of ['taxable','retire'])for(const a of ASSETS){
+  const old=S[acc][a.k];let nv=Math.max(0,old*(1+E.ret[a.k]-a.fee/12));
+  if(acc==='taxable'&&!S.reinvest){const d=Math.min(nv,old*(DIV[a.k]||0)/12);nv-=d;divPaid+=d}
+  S[acc][a.k]=nv;
+ }
+ const ci=S.cash*E.ret.cash;S.cash+=ci;
+ const T=S.taxable;S.ytd.gains+=ci+T.cash*E.ret.cash+(T.stocks*.02+T.picks*.015+T.reit*.035+T.bondG*(S.rate+.01)+T.bondC*(S.rate+.028))/12;
+ if(S.home.own)S.home.value*=1+E.reRet;
+ resolvePending(ev);
+ /* relationships */
+ if(S.partner&&Math.random()<((S.ageM-(S.partner.since||0))<120?.025:.008)/12*(S.debt.card>0?2:1))divorce(ev);
+ if(S.dating&&!S.partner&&Math.random()<.07)meetPartner(ev);
+ if(S.trying&&S.partner&&S.kids.length<4&&!S.pend.some(p=>p.kind==='birth')&&Math.random()<.15){S.trying=false;S.pend.push({kind:'birth',m:9});ev.push(['🤰 A baby is on the way, due in 9 months.',1])}
+ if(S.partner){const p=S.partner;if(mo===0)p.salary*=1+S.infl+.01;
+  if(!S.retired){if(p.employed){if(Math.random()<R.jl/12*.8){p.employed=false;ev.push(['😟 Your partner lost their job.',1])}}else if(Math.random()<R.hire*.2){p.employed=true;ev.push(['🙂 Your partner found a new job.',1])}}}
+ /* income */
+ const inc={salary:0,bonus:0,side:0,room:0,dividends:divPaid,pension:0,benefit:0,partner:0,windfall:0};
+ if(S.studying){inc.salary=1000*pi;S.debt.student+=EDU[S.eduTarget].cost/12*pi;S.eduLeftM--;if(S.eduLeftM<=0)graduate(ev)}
+ else if(S.retired){inc.pension=pensionAnnual()*(age>=65?1:age>=62?.75:0)/12}
+ else{
+  if(S.employed){
+   const f=FIELDS[S.field],pl=R.jl*f.stab*(age>=58?1.4:1)*(S.work==='push'?.85:1)*(S.probation>0?2:1)/12;
+   if(S.probation>0)S.probation--;
+   if(Math.random()<pl){S.employed=false;S.lastSalary=S.salary;S.unempM=0;addMood(-6,6,'Laid off');ev.push(['📉 You were laid off.',2])}
+  }else if(S.field){
+   S.unempM++;
+   if(Math.random()<hireChance()*.22){S.employed=true;S.salary=S.lastSalary*.95;S.unempM=0;S.probation=6;ev.push(['💼 You found a new job in '+FIELDS[S.field].name+'.',2])}
+  }
+  if(S.employed){
+   const f=FIELDS[S.field];
+   if(mo===0)S.salary*=1+S.infl+f.g*(.3+S.skill/200)*(age>=55?.5:1)+randn()*.01;
+   S.skill=Math.min(100,S.skill+{coast:2,push:5,train:8}[S.work]/12*(1-S.skill/130));
+   const nl=S.skill>=75?3:S.skill>=50?2:S.skill>=25?1:0;
+   if(nl>S.level){S.level=nl;S.salary*=1.10;addMood(3,6,'Promotion');ev.push(['⭐ Promoted to level '+(nl+1)+'! Salary now '+money(S.salary)+'/yr.',2])}
+   inc.salary=S.salary/12*(S.work==='push'?1.06:1);
+   if(mo===11){inc.bonus=S.salary*f.bonus*(.5+S.skill/100)*R.bonus*(S.work==='push'?1.3:1)*(.6+Math.random()*.8);if(inc.bonus>50)ev.push(['🎁 Year-end bonus: '+money(inc.bonus)+'.',1])}
+   S.lastSalary=S.salary;S.workM++;S.careerSum+=inc.salary*12/pi;
+   if(S.skill>=35&&Math.random()<.004*(S.regime==='expansion'?1.3:S.regime==='recession'?.3:1))offerJob(ev);
+  }else if(S.field){inc.benefit=(S.unempM<=6?.4:S.unempM<=18?.12:0)*S.lastSalary/12;S.skill=Math.max(0,S.skill-1/12)}
+ }
+ const gig=SIDE.find(x=>x.k===S.side)||SIDE[0];
+ if(gig.h>0){if(sideOk(gig)){inc.side=gig.h*4.33*gig.pay*pi*Math.max(0,1+(gig.vol||0)*randn());if(gig.k==='freelance')S.skill=Math.min(100,S.skill+1/12)}else{S.side='none';ev.push(['Your side gig stopped: you no longer meet its requirements.',1])}}
+ if(S.home.own&&S.roomLet)inc.room=650*pi*S.rel.housing;
+ let pTax=0;
+ if(S.partner){const p=S.partner,pg=S.retired?p.salary*.3/12:p.employed?p.salary/12:0;inc.partner=pg;pTax=(incomeTax(pg*12,pi)+(S.retired?0:.07*Math.min(pg*12,150000*pi)))/12}
+ let contrib=0,match=0;
+ if(inc.salary>0&&!S.studying&&!S.retired){contrib=Math.min(S.contribPct/100*inc.salary,23000*pi/12);match=Math.min(contrib,.06*inc.salary)*.5}
+ const wh=(incomeTax((inc.salary-contrib+inc.pension+inc.benefit)*12,pi)+.07*Math.min(inc.salary*12,150000*pi))/12+.25*inc.bonus;
+ const y=S.ytd;y.wage+=inc.salary;y.bonus+=inc.bonus;y.side+=inc.side;y.pension+=inc.pension;y.benefit+=inc.benefit;y.room+=inc.room;y.contrib+=contrib;y.withheld+=wh;
+ addTo('retire',contrib+match);
+ /* itemized spending */
+ const ad=S.partner?2:1,nk=S.kids.length,st=S.studying,rel=S.rel,ex={};
+ const netInc=sum(inc)-inc.windfall-wh-pTax-contrib;
+ S.incEst=S.incEst>0?.92*S.incEst+.08*netInc:netInc;
+ for(const k of ['food','phone','transport','clothing','fun','misc'])ex[k]=costOf(k,B[k]);
+ if(S.dating)ex.fun+=100*pi*rel.goods;
+ ex.travel=mo===6?costOf('travel',B.travel)*12:0;
+ ex.utilities=(S.home.own?HOMES[S.home.tier].util:RENT[S.rentTier].util)*pi*rel.energy*(se==='winter'?1.4:(mo===6||mo===7)?1.15:1)*(st?.5:1);
+ ex.subs=SUBS.filter(s=>S.subs[s.k]).reduce((a,s)=>a+s.c,0)*pi*rel.goods;
+ ex.kids=S.kids.reduce((a,k)=>a+250+(k<60?450:0),0)*pi*rel.goods+(mo===7?S.kids.filter(k=>k>=60).length*400*pi:0);
+ ex.holidays=mo===11?([150,600,1500][B.fun]+200*nk)*pi*rel.goods:0;
+ if(S.home.own)ex.housing=S.home.value*.0235/12+mortgageMonth(ev);
+ else{S.leaseM--;if(S.leaseM<=0){const nr=marketRent();if(nr>S.rentPay*1.01)ev.push(['🏠 Lease renewed: rent rises to '+money(nr)+'/mo.',0]);S.rentPay=nr;S.leaseM=12}ex.housing=S.rentPay*(st?.5:1)}
+ ex.debt=0;
+ if(S.debt.student>0){S.debt.student*=1+.05/12;if(!st){const p=Math.min(S.debt.student,Math.max(50*pi,S.debt.student*.01));S.debt.student-=p;ex.debt+=p}}
+ if(S.debt.card>0){S.debt.card*=1+.18/12;const p=Math.min(S.debt.card,Math.max(25,S.debt.card*.03));S.debt.card-=p;ex.debt+=p}
+ const ageF=1+Math.max(0,age-30)/50;
+ ex.insurance=S.insured?(230*ad+60*nk)*pi*rel.health*ageF*(st?.3:1):0;
+ ex.medical=40*pi*rel.health*(1+(100-S.health)/60)*(1+age/60)*ad*(S.insured?.3:1);
+ ex.wellness=WELL[S.wellness].c*pi;
+ ex.training=S.work==='train'&&S.employed?250*pi:0;
+ ex.care=0;if(S.care>0){ex.care=700*pi;S.care--}
+ /* random events */
+ let evCost=0,hit=0;
+ if(Math.random()<(.02+(100-S.health)/600+age/1000)/12){const raw=(4000+45000*Math.pow(Math.random(),3))*pi*rel.health*(.6+age/100),paid=S.insured?Math.min(raw*.2,5000*pi):raw;evCost+=paid;hit+=5+Math.random()*12;S.medNow=true;addMood(-3,3,'Medical scare');ev.push(['🏥 Medical emergency: the bill was '+money(raw)+' and you paid '+money(paid)+(S.insured?' (insured).':' (uninsured).'),2])}
+ if(S.home.own&&Math.random()<.4/12){const c=(1500+7000*Math.pow(Math.random(),2))*pi;evCost+=c;ev.push(['🔧 Home repair: '+money(c)+'.',1])}
+ if(B.transport>=1&&Math.random()<(B.transport===1?.35:.12)/12){const c=(400+2600*Math.pow(Math.random(),2))*pi;evCost+=c;ev.push(['🚗 Car repair: '+money(c)+'.',1])}
+ if(age>=35&&age<=70&&Math.random()<.025/12){const c=(20000+250000*Math.pow(Math.random(),2))*pi;inc.windfall+=c;ev.push(['🎁 Inheritance: '+money(c)+'.',2])}
+ if(age>=40&&age<=62&&S.care===0&&ex.care===0&&Math.random()<.05/12){S.care=36;ev.push(['👵 A parent needs care: about '+money(700*pi)+'/mo for 3 years.',2])}
+ if(Math.random()<.012/12){const c=Math.min(S.cash,(3000+15000*Math.random())*pi);if(c>100){evCost+=c;addMood(-3,4,'Scammed');ev.push(['🕵️ You were scammed out of '+money(c)+'.',2])}}
+ if(mo===3&&S.taxDue!==null){const d=S.taxDue,small=Math.abs(d)<50*pi;if(d<0){inc.windfall+=-d;if(!small)ev.push(['🧾 Tax refund: '+money(-d)+'.',1])}else{evCost+=d;if(!small)ev.push(['🧾 Tax bill: you owe '+money(d)+' on side income, bonuses, dividends or interest.',1])}S.taxDue=null}
+ if(age<80&&Math.random()<.03)tempt(ev);
+ ex.events=evCost;
+ /* settle the month */
+ const tax=wh+pTax,flow=sum(inc)-contrib-tax-sum(ex);
+ const core=Math.max(300*pi,sum(ex)-ex.debt-ex.events-ex.travel-ex.holidays);S.coreExp=core;
+ S.cash+=flow;
+ if(S.cash<0&&S.studying){const l=Math.min(-S.cash,1000*pi);S.debt.student+=l;S.cash+=l}
+ if(S.cash<0){const need=-S.cash;S.cash=0;coverDeficit(need)}
+ else{const target=S.emergencyMonths*core;let spare=Math.max(0,S.cash-target);S.cash-=spare;let p=Math.min(spare,S.debt.card);S.debt.card-=p;spare-=p;if(S.payDebt){p=Math.min(spare,S.debt.student);S.debt.student-=p;spare-=p}if(S.investSurplus)addTo('taxable',spare);else S.cash+=spare}
+ if(S.rebal||mo===0){rebalance('taxable');rebalance('retire');S.rebal=false}
+ if(S.debt.card>60*core){S.debt.card=0;S.bankrupt++;addMood(-15,24,'Bankruptcy');ev.push(['⚠️ Bankruptcy: your card debt was wiped out, at a heavy cost to your well-being.',2])}
+ if(S.debt.card>100&&!S.cardWarn){S.cardWarn=true;ev.push(['💳 You are now borrowing on your credit card at 18%. Consider trimming your budget at Home.',2])}else if(S.debt.card<=100)S.cardWarn=false;
+ if(S.retired&&S.home.own&&S.cash+sum(S.taxable)+sum(S.retire)<6*core&&(!S.dsAsk||S.ageM-S.dsAsk>=24)&&!busy()){
+  S.dsAsk=S.ageM;const eq=S.home.value*.94-S.home.mort-(inFix()?.03*S.home.mort:0);
+  pushDecision({title:'Your savings are running low',icon:'🏡',text:'Your savings will only cover a few more months of spending. Selling your home would free up about '+money(eq)+', and you would rent a small apartment instead.',opts:[{l:'Sell and rent a smaller place',a:'downsize'},{l:'Keep the home for now',a:'decline'}]});
+  ev.push(['🏡 Your savings are running low: a decision is waiting.',2]);
+ }
+ /* health and happiness */
+ let dh=-(age<40?.2:age<60?.6:age<75?1.3:2.2)/12+WELL[S.wellness].h/12+(S.insured?.3/12:0)+BUD.food.opts[B.food][3]+(S.subs.gym?.04:0)-(B.fun===2?.03:0)-(S.work==='push'&&S.employed?2/12:0)-(S.field&&!S.employed&&!S.retired&&!S.studying?1/12:0)-(S.debt.card>0?.5/12:0)-gig.h*.002-hit;
+ S.health=clamp(S.health+dh+randn()*.25,5,100);
+ S.deathM=clamp(S.deathM+(S.health-55)/150,720,1440);
+ let t=50;for(const k in BUD)t+=BUD[k].opts[B[k]][2];
+ t+=subsHappy()+(S.health-60)/8;
+ if(S.employed)t+=2+FIELDS[S.field].sat;else if(S.retired)t+=4;else if(S.studying)t+=1;else t-=6;
+ if(S.partner)t+=5;t+=Math.min(3,nk)*2.5;if(nk>=2&&!S.home.own&&S.rentTier<2)t-=2;
+ if(S.work==='push'&&S.employed)t-=4;t-=gig.h*.25;
+ t+=S.home.own?HOMES[S.home.tier].h:RENT[S.rentTier].h;if(S.roomLet&&S.home.own)t-=2;
+ const liquid=S.cash+sum(S.taxable);
+ if(S.debt.card>0)t-=6;else if(liquid<3*core)t-=3;else if(liquid>=6*core)t+=2;
+ if(S.care>0)t-=4;
+ if(S.retired)t+=(liquid+sum(S.retire)>96*core)?3:-6;
+ t+=S.mood.reduce((a,m)=>a+m.v,0);S.mood.forEach(m=>m.m--);S.mood=S.mood.filter(m=>m.m>0);
+ S.happy=clamp(.85*S.happy+.15*t,0,100);
+ /* bookkeeping */
+ const stress=S.stressNow||S.debt.card>0||(S.retired&&liquid+sum(S.retire)<3*core);
+ S.stats.months++;S.stats.happy+=S.happy;S.stats.health+=S.health;if(stress)S.stats.stressM++;
+ S.last={inc,ex,tax,contrib,match,flow,mo};
+ S.kids=S.kids.map(k=>k+1).filter(k=>{if(k>=216){ev.push(['🧑 A child turned 18 and moved out.',1]);return false}return true});
+ if(mo===11)yearTax();
+ const big=ev.filter(e=>e[1]>=2);
+ S.fxEmoji=big.length?big[0][0].split(' ')[0]:'';
+ ev.forEach(e=>{say(e[0]);if(e[1]>=1)pushToast(e[0])});
+ S.ageM++;S.month=(mo+1)%12;S.stressNow=false;
+ if(ageY()>=70&&!S.retired){retireNow(true);say('🪑 You turned 70 and retired.');pushToast('🪑 You turned 70 and retired.')}
+ S.hist.push(nw()/S.pi);
+ if(S.ageM>=S.deathM){S.phase='dead';S.panel=null;say('You passed away at '+ageY()+'.')}
+ return {major:big.length>0,notable:ev.some(e=>e[1]>=1)};
+}
+
+/* ================= time control ================= */
+function advance(n,until){
+ if(runTimer||S.phase!=='play')return;
+ if(S.decision){render();return}
+ if(n===1&&!until){tick();after();return}
+ let left=until?240:n;
+ runTimer=-1;renderControls();
+ const step=()=>{
+  const r=tick();left--;
+  const stop=S.phase!=='play'||!!S.decision||(until?r.notable:(S.pauseOnEvents&&r.major));
+  if(left<=0||stop){runTimer=null;after();return}
+  renderLive();
+  runTimer=setTimeout(step,until?60:n>=12?90:170);
+ };
+ step();
+}
+function stopRun(){if(runTimer&&runTimer!==-1)clearTimeout(runTimer);runTimer=null;after()}
+
+/* ================= player actions ================= */
+const NUMK=['emergencyMonths','contribPct','wellness','down','mortTerm'];
+const BOOLK=['insured','payDebt','investSurplus','reinvest','pauseOnEvents','roomLet','dating','trying'];
+function setOpt(k,v){
+ if(NUMK.includes(k))v=+v;else if(BOOLK.includes(k))v=(v===true||v==='true');
+ if(k==='roomLet'&&(!S.home.own||!HOMES[S.home.tier].room))return;
+ S[k]=v;after();
+}
+function setBudget(k,v){S.budget[k]=+v;if(k==='transport'&&+v===0&&S.side==='delivery'){S.side='none';say('You stopped delivery driving: it needs a car.')}after()}
+function toggleSub(k){S.subs[k]=!S.subs[k];after()}
+function setSide(_,v){const g=SIDE.find(x=>x.k===v);if(!sideOk(g)){say('You do not meet the requirements for '+g.n.toLowerCase()+' yet.');return after()}S.side=v;after()}
+function setAlloc(k,v){v=clamp(Math.round(+v||0),0,100);const others=sum(S.alloc)-S.alloc[k];S.alloc[k]=Math.min(v,100-others);S.rebal=true;after()}
+function setPreset(n){for(const k in S.alloc)S.alloc[k]=PRESETS[n][k]||0;S.rebal=true;after()}
+function openPanel(k){S.panel=S.panel===k?null:k;render()}
+function closePanel(){S.panel=null;render()}
+function startGame(path){
+ if(path==='work'){S.panel='work';say('You enter the workforce at 18.')}
+ else{S.studying=true;S.eduTarget=path==='voc'?1:2;S.eduLeftM=EDU[S.eduTarget].years*12;say('You enrol in '+EDU[S.eduTarget].n.toLowerCase()+'.')}
+ S.phase='play';after();
+}
+function applyJob(key){
+ const f=FIELDS[key];
+ if(S.studying||S.retired)return;
+ if(S.edu<f.edu){say('You need a '+EDU[f.edu].n.toLowerCase()+' for '+f.name+'.');return after()}
+ if(S.applies>=3){say('No more applications this month.');return after()}
+ S.applies++;
+ const same=S.field===key,p=hireChance()*(same?1:.85)*(.7+S.skill/200)*.5;
+ if(Math.random()<p){
+  if(!same){S.salary=f.start*S.pi*(1+.03*Math.min(S.workM/12,12));S.skill=Math.max(5,S.skill*.6);S.level=0}else S.salary=S.lastSalary*.95;
+  S.field=key;S.employed=true;S.unempM=0;S.lastSalary=S.salary;S.probation=same?6:3;
+  say('You got a job in '+f.name+' at '+money(S.salary)+'/yr.');pushToast('💼 Hired in '+f.name+'!');
+ }else say('No offer from '+f.name+' this time.');
+ after();
+}
+function enroll(t){
+ if(S.studying||S.retired||S.edu>=t)return;
+ if(!confirm('Go back to school for '+EDU[t].years+' years? You will stop working and borrow for tuition.'))return;
+ S.studying=true;S.eduTarget=t;S.eduLeftM=EDU[t].years*12;S.employed=false;S.field=null;S.salary=0;S.work='coast';
+ say('You enrol in '+EDU[t].n.toLowerCase()+'.');after();
+}
+function retireNow(silent){
+ S.retired=true;S.employed=false;S.work='coast';
+ if(!silent){say('You retired.');after()}
+}
+function moveRent(i){
+ if(S.home.own||i===S.rentTier)return;
+ const fee=1500*S.pi+(S.leaseM<12?S.rentPay:0);
+ if(!confirm('Moving costs about '+money(fee)+'. Move?'))return;
+ spendNow(fee);S.rentTier=i;S.rentPay=marketRent();S.leaseM=12;
+ say('You moved into a '+RENT[i].n.toLowerCase()+' at '+money(S.rentPay)+'/mo.');after();
+}
+function buyHome(t){
+ if(S.home.own)return;
+ const v=HOMES[t].p*S.reIdx,down=v*S.down,fees=v*.03+1000*S.pi,m=v-down,ex=S.down<.1?.005:0,p=S.mortPick,r=newRate(p,ex),n=S.mortTerm*12;
+ if(!affordable(m,r,n)){say('The lender says no: the payment would be too high for your income.');return after()}
+ if(S.cash+sum(S.taxable)<down+fees){say('You need '+money(down+fees)+' in cash and investments for the deposit and fees.');return after()}
+ spendNow(down+fees);
+ S.home={own:true,tier:t,value:v,mort:m,product:p,rate:r,extra:ex,termM:n,fixEnd:p==='fix5'?S.ageM+60:0,pmt:annuity(m,r,n),overYTD:0};
+ S.roomLet=false;
+ say('You bought a '+HOMES[t].n.toLowerCase()+' for '+money(v)+' with a '+MORT[p].n.toLowerCase()+' mortgage at '+pct(r,2)+' ('+money(S.home.pmt)+'/mo).');
+ pushToast('🔑 You bought a '+HOMES[t].n.toLowerCase()+'!');after();
+}
+function sellHome(silent){
+ const h=S.home;if(!h.own)return;
+ const erc=inFix()?.03*h.mort:0,net=h.value*.94-h.mort-erc;
+ if(net>=0)S.cash+=net;else{S.debt.card+=-net;S.stressNow=true}
+ S.home={own:false};S.rentTier=1;S.rentPay=marketRent();S.leaseM=12;S.roomLet=false;
+ if(!silent){say('You sold your home and kept '+money(net)+' after costs'+(erc?' (including a '+money(erc)+' exit charge)':'')+'.');after()}
+}
+function remortgage(p,quiet){
+ const h=S.home;if(!h.own||h.mort<=0||h.product===p)return;
+ const erc=inFix()?.03*h.mort:0,fee=1000*S.pi,r=newRate(p,h.extra);
+ if(!affordable(h.mort,r,h.termM)){say('The lender turned down your remortgage: your income fails the stress test.');if(!quiet)after();return}
+ spendNow(erc+fee);h.product=p;h.rate=r;h.fixEnd=p==='fix5'?S.ageM+60:0;h.pmt=annuity(h.mort,r,h.termM);
+ say('Remortgaged to a '+MORT[p].n.toLowerCase()+' at '+pct(r,2)+' ('+money(h.pmt)+'/mo).');if(!quiet)after();
+}
+function overpay(x){
+ const h=S.home;if(!h.own||h.mort<=0)return;
+ x=Math.min(x,h.mort,S.cash);if(x<=0){say('Not enough cash to overpay.');return after()}
+ let erc=0;
+ if(inFix()){const allow=Math.max(0,.1*h.mort-(h.overYTD||0));if(x>allow){if(x+(x-allow)*.03>S.cash)x=allow+(S.cash-allow)/1.03;erc=Math.max(0,x-allow)*.03}}
+ S.cash-=x+erc;h.mort-=x;h.overYTD=(h.overYTD||0)+x;
+ if(h.product==='variable'||h.product==='svr')h.pmt=annuity(h.mort,h.rate,h.termM);
+ say('Overpaid '+money(x)+' on the mortgage'+(erc>0?' (charge '+money(erc)+')':'')+'.');after();
+}
+function payDebt(k){const p=Math.min(S.debt[k],S.cash);if(p<=0)return;S.cash-=p;S.debt[k]-=p;say('Paid '+money(p)+' toward '+(k==='card'?'credit card':'student loan')+' debt.');after()}
+function newGame(){
+ if(S&&S.phase==='play'&&!confirm('Start a new life? This one will be lost.'))return;
+ if(runTimer&&runTimer!==-1)clearTimeout(runTimer);runTimer=null;
+ for(const k in C)delete C[k];
+ S=fresh();toastQ=[];after();
+}
+
+/* ================= scene (2D town) ================= */
+const SKY={winter:['#8fa8c0','#dde6ee'],spring:['#6fb8ea','#d6efff'],summer:['#3f9ee8','#bfe5ff'],autumn:['#7fa6cf','#f2d3ad']};
+const HILL={winter:['#e9eef2','#d5dee6'],spring:['#8ccf7e','#6dbb63'],summer:['#5fae55','#4a9645'],autumn:['#c9a25a','#b07d3c']};
+function upd(id,key,fn){if(C[id]===key)return;C[id]=key;$(id).innerHTML=fn()}
+function lbl(x,y,t){const w=t.length*6.3+16;return `<g class="lbl"><rect x="${x-w/2}" y="${y-13}" width="${w}" height="18" rx="9" fill="rgba(14,19,25,.78)"/><text x="${x}" y="${y}" text-anchor="middle">${t}</text></g>`}
+function bg(panel,inner,title){return `<g class="bld${S.panel===panel?' sel':''}" onclick="openPanel('${panel}')"><title>${title}</title>${inner}</g>`}
+function wins(x,y,c,r,w,h,gx,gy,lit,on,off,seed){let s='';for(let i=0;i<c;i++)for(let j=0;j<r;j++){const L=((i*7+j*13+(seed||0))%10)/10<lit;s+=`<rect x="${x+i*gx}" y="${y+j*gy}" width="${w}" height="${h}" rx="1.5" fill="${L?on:off}"/>`}return s}
+function workKey(){return S.retired?'ret':S.employed?S.field:S.studying?'stud':(S.field?'unemp':'none')}
+function homeKey(){return S.home.own?'o'+S.home.tier:'r'+S.rentTier}
+function renderScene(){
+ const se=SEASON(S.month),gl=S.regime==='recession'?2:S.regime==='slowdown'?1:0,sp=S.panel||'';
+ upd('g-sky',se+gl,()=>{const [a,b]=SKY[se];return `<defs><linearGradient id="skyg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs><rect width="1000" height="440" fill="url(#skyg)"/>`});
+ upd('g-sun',S.month+'|'+gl,()=>{const x=110+S.month*70,y=80-32*Math.cos(2*Math.PI*(S.month-5.5)/12);return `<circle cx="${x}" cy="${y}" r="34" fill="#ffe9a8" opacity="${gl===2?.3:.5}"/><circle cx="${x}" cy="${y}" r="24" fill="${gl===2?'#e8e2c8':'#ffd54a'}"/>`});
+ upd('g-clouds',gl,()=>clouds(gl));
+ upd('g-hills',se,()=>{const [a,b]=HILL[se];return `<path d="M0,300 C120,220 220,250 330,235 C460,215 560,270 700,240 C820,215 900,250 1000,230 L1000,345 L0,345Z" fill="${a}"/><path d="M0,330 C150,280 300,300 450,290 C600,280 760,310 1000,285 L1000,345 L0,345Z" fill="${b}"/>`});
+ upd('g-school',se+S.studying+sp,school);
+ upd('g-work',workKey()+sp,work);
+ upd('g-bank',se+sp,bank);
+ upd('g-home',homeKey()+se+sp+S.roomLet,home);
+ upd('g-exch',S.ageM+sp,exch);
+ upd('g-clinic',S.medNow+sp,clinic);
+ upd('g-park',se+sp,park);
+ upd('g-street',se,street);
+ upd('g-people',S.ageM+'|'+Math.round(S.happy/8)+'|'+(S.partner?1:0)+'|'+S.kids.join(',')+workKey()+sp+Math.round(S.health/10),people);
+ upd('g-car',''+S.budget.transport,car);
+ upd('g-traffic',S.regime,traffic);
+ upd('g-weather',se+(S.rain?1:0),()=>weather(se));
+ upd('g-gloom',''+gl,()=>gl?`<rect width="1000" height="440" fill="#1b2532" opacity="${gl===2?.22:.08}"/>`:'');
+ upd('g-fx',S.ageM+'|'+S.phase,fx);
+}
+function clouds(gl){
+ const f=gl===2?'#8a929c':gl===1?'#e3e7ec':'#ffffff';
+ return [[60,90,-10],[110,60,-50],[45,140,-30],[90,75,-70]].map(([y,d,del],i)=>`<g class="cloud" style="animation-duration:${d}s;animation-delay:${del}s" opacity=".9"><ellipse cx="0" cy="${y}" rx="${40+i*8}" ry="16" fill="${f}"/><ellipse cx="${22+i*3}" cy="${y-10}" rx="${26+i*4}" ry="15" fill="${f}"/><ellipse cx="-24" cy="${y-4}" rx="22" ry="12" fill="${f}"/></g>`).join('');
+}
+function street(){
+ const se=SEASON(S.month),w=se==='winter';
+ return `<rect x="0" y="338" width="1000" height="16" fill="${w?'#e6ecf1':'#a7afb8'}"/><rect x="0" y="336" width="1000" height="3" fill="#7d8690"/><rect x="0" y="354" width="1000" height="66" fill="#3a4049"/>${Array.from({length:25},(_,i)=>`<rect x="${i*42+6}" y="396" width="22" height="3" fill="#e8d36a" opacity=".8"/>`).join('')}<rect x="0" y="420" width="1000" height="20" fill="${w?'#eef3f6':HILL[se][1]}"/>`;
+}
+function school(){
+ const w=SEASON(S.month)==='winter';
+ return bg('school',`<rect x="14" y="248" width="106" height="92" fill="#b5553c"/><polygon points="8,250 67,208 126,250" fill="#7a3426"/>${w?'<polygon points="8,250 67,208 126,250 118,250 67,215 16,250" fill="#f4f8fb"/>':''}<circle cx="67" cy="232" r="9" fill="#fff8e6" stroke="#5a2e1e"/><line x1="67" y1="232" x2="67" y2="226" stroke="#333" stroke-width="1.5"/><line x1="67" y1="232" x2="71" y2="233" stroke="#333" stroke-width="1.5"/>${wins(22,262,3,2,16,14,26,22,S.studying?.8:.3,'#ffe7a0','#6d7f92',1)}<rect x="57" y="306" width="20" height="34" fill="#5a2e1e"/><line x1="122" y1="185" x2="122" y2="250" stroke="#ccc" stroke-width="2"/><rect x="122" y="186" width="20" height="13" fill="${S.studying?'#4cc38a':'#5aa9f0'}"/>${lbl(67,200,S.studying?'School · studying':'School')}`,'School: education');
+}
+function work(){
+ const k=workKey(),lit=S.employed?.75:.15;let inner,label,ly=248;
+ if(k==='service'){inner=`<rect x="142" y="262" width="136" height="78" fill="#f2ede0"/>${Array.from({length:8},(_,i)=>`<rect x="${142+i*17}" y="258" width="17" height="20" fill="${i%2?'#fff':'#e05a4a'}"/>`).join('')}<rect x="152" y="290" width="70" height="38" fill="#9fd3f0"/><rect x="232" y="292" width="34" height="48" fill="#6b4a3a"/><circle cx="168" cy="318" r="7" fill="#f0b43c"/><circle cx="186" cy="320" r="6" fill="#e05a4a"/><rect x="198" y="310" width="16" height="16" fill="#4cc38a"/>`;label='Shop · your job';ly=250}
+ else if(k==='trades'){inner=`<rect x="142" y="256" width="136" height="84" fill="#9aa5ad"/>${Array.from({length:17},(_,i)=>`<line x1="${144+i*8}" y1="258" x2="${144+i*8}" y2="340" stroke="#8a949c"/>`).join('')}<polygon points="138,258 210,236 282,258" fill="#6d777f"/><rect x="158" y="282" width="78" height="58" fill="#c8cdd1"/>${[0,1,2,3,4].map(i=>`<line x1="158" y1="${292+i*10}" x2="236" y2="${292+i*10}" stroke="#a9b0b6"/>`).join('')}<circle cx="258" cy="292" r="11" fill="#f0b43c"/><circle cx="258" cy="292" r="4" fill="#9aa5ad"/>`;label='Workshop · your job';ly=230}
+ else if(k==='public'){inner=`<rect x="142" y="266" width="136" height="74" fill="#e8e1d0"/><polygon points="136,268 210,232 284,268" fill="#d6ccb4"/>${[0,1,2,3,4].map(i=>`<rect x="${152+i*26}" y="274" width="10" height="60" fill="#f6f1e4"/>`).join('')}<rect x="136" y="334" width="148" height="6" fill="#c9bfa6"/><line x1="210" y1="204" x2="210" y2="234" stroke="#bbb" stroke-width="2"/><rect x="210" y="204" width="18" height="12" fill="#5aa9f0"/>`;label='Town hall · your job';ly=198}
+ else if(k==='health'){inner=`<rect x="146" y="214" width="128" height="126" fill="#f4f6f8"/>${wins(154,250,5,3,14,12,23,20,lit,'#bfe3ff','#8fa9bf',3)}<rect x="196" y="222" width="28" height="8" fill="#e04a4a"/><rect x="206" y="212" width="8" height="28" fill="#e04a4a"/><rect x="196" y="318" width="28" height="22" fill="#9fd3f0"/>`;label='Hospital · your job';ly=204}
+ else if(k==='tech'){inner=`<defs><linearGradient id="glass" x1="0" x2="1"><stop offset="0" stop-color="#4f9be6"/><stop offset="1" stop-color="#1f4f8a"/></linearGradient></defs><rect x="150" y="196" width="120" height="144" fill="url(#glass)"/>${wins(156,204,5,6,18,14,22,19,lit,'#d9f1ff','#3a6ea8',5)}<rect x="196" y="318" width="28" height="22" fill="#cfe9ff"/><text x="210" y="192" text-anchor="middle" font-size="14" fill="#fff">◆</text>`;label='Tech office · your job';ly=180}
+ else if(k==='finance'){inner=`<rect x="168" y="150" width="84" height="190" fill="#2b3448"/><polygon points="168,150 210,118 252,150" fill="#3b4660"/><line x1="210" y1="98" x2="210" y2="118" stroke="#c9a227" stroke-width="2"/>${wins(176,162,4,8,12,10,19,18,lit,'#f3d27a','#45506a',7)}<text x="210" y="145" text-anchor="middle" font-size="16" font-weight="700" fill="#c9a227">$</text><rect x="196" y="318" width="28" height="22" fill="#c9a227"/>`;label='Finance tower · your job';ly=92}
+ else{inner=`<rect x="142" y="274" width="136" height="66" fill="#8d99a6"/><rect x="138" y="270" width="144" height="8" fill="#6f7a86"/><rect x="160" y="284" width="100" height="18" rx="3" fill="${k==='ret'?'#5aa9f0':'#f0c43c'}"/><text x="210" y="297" text-anchor="middle" font-size="11" font-weight="700" fill="#1b2532">${k==='ret'?'COMMUNITY':'JOB CENTRE'}</text><rect x="196" y="312" width="28" height="28" fill="#5b6672"/>${wins(150,314,2,1,16,14,20,0,.3,'#ffe7a0','#b5c2cf',2)}${wins(234,314,2,1,16,14,20,0,.3,'#ffe7a0','#b5c2cf',4)}`;label=k==='ret'?'Community centre':k==='stud'?'Job Centre · part-time':k==='unemp'?'Job Centre · find work':'Job Centre';ly=262}
+ return bg('work',inner+lbl(210,ly,label),'Work, careers and side gigs');
+}
+function bank(){
+ const w=SEASON(S.month)==='winter';
+ return bg('bank',`<rect x="302" y="266" width="100" height="74" fill="#ddd6c4"/><polygon points="296,268 352,236 408,268" fill="#c9c0aa"/>${w?'<polygon points="296,268 352,236 408,268 400,268 352,242 304,268" fill="#f4f8fb"/>':''}<text x="352" y="262" text-anchor="middle" font-size="10" font-weight="700" fill="#6b5d3a">BANK</text>${[0,1,2,3].map(i=>`<rect x="${312+i*24}" y="272" width="9" height="62" fill="#f2ecdc"/>`).join('')}<rect x="296" y="334" width="112" height="6" fill="#c2b89f"/>${lbl(352,226,'Bank')}`,'Bank: debt, mortgage, taxes');
+}
+function home(){
+ const k=homeKey(),w=SEASON(S.month)==='winter',sn='#f4f8fb';let s,top;
+ if(k==='r0'){s=`<rect x="440" y="222" width="140" height="118" fill="#a88b6e"/>${w?`<rect x="438" y="218" width="144" height="6" fill="${sn}"/>`:''}${wins(450,232,4,3,18,16,33,25,.25,'#ffe7a0','#5d6e80',2)}<rect x="483" y="232" width="18" height="16" fill="#ffd56a" stroke="#fff" stroke-width="1.5"/><rect x="496" y="314" width="28" height="26" fill="#4a3a2a"/><line x1="580" y1="240" x2="580" y2="330" stroke="#555"/>`;top=212}
+ else if(k==='r1'){s=`<rect x="440" y="208" width="140" height="132" fill="#c9b8a6"/><rect x="436" y="204" width="148" height="8" fill="${w?sn:'#9c8b79'}"/>${wins(452,220,4,3,18,18,32,26,.4,'#ffe7a0','#6d7f92',4)}<rect x="496" y="312" width="28" height="28" fill="#5a4636"/>`;top=198}
+ else if(k==='r2'){s=`<rect x="436" y="192" width="148" height="148" fill="#e6dccd"/>${w?`<rect x="434" y="188" width="152" height="6" fill="${sn}"/>`:''}${[0,1,2,3].map(j=>`<rect x="436" y="${222+j*28}" width="148" height="3" fill="#b9ab96"/>${[0,1,2].map(i=>`<circle cx="${458+i*52}" cy="${219+j*28}" r="5" fill="${w?'#9fb3a0':'#5fae55'}"/>`).join('')}`).join('')}${wins(446,198,4,4,22,14,34,28,.5,'#ffe7a0','#7f93a8',6)}<rect x="496" y="312" width="28" height="28" fill="#6b4a3a"/>`;top=182}
+ else if(k==='r3'){s=`<defs><linearGradient id="lux" x1="0" x2="1"><stop offset="0" stop-color="#4b5d7a"/><stop offset="1" stop-color="#2b3850"/></linearGradient></defs><rect x="455" y="118" width="110" height="222" fill="url(#lux)"/><rect x="455" y="118" width="110" height="18" fill="#c9a227" opacity=".85"/>${wins(463,144,5,9,14,12,20,18,.55,'#ffe7a0','#3c4d68',8)}<rect x="496" y="314" width="28" height="26" fill="#c9a227"/>`;top=110}
+ else if(k==='o0'){s=`<rect x="458" y="276" width="104" height="64" fill="#e9d8b4"/><polygon points="448,278 510,232 572,278" fill="#a14d3a"/>${w?`<polygon points="448,278 510,232 572,278 564,278 510,239 456,278" fill="${sn}"/>`:''}<rect x="498" y="304" width="22" height="36" fill="#6b4a3a"/><rect x="468" y="290" width="22" height="18" fill="#ffe7a0"/><rect x="530" y="290" width="22" height="18" fill="#ffe7a0"/>${Array.from({length:7},(_,i)=>`<rect x="${444+i*20}" y="326" width="4" height="14" fill="#f4f1ea"/>`).join('')}<rect x="444" y="330" width="128" height="3" fill="#f4f1ea"/>`;top=226}
+ else if(k==='o1'){s=`<rect x="440" y="258" width="128" height="82" fill="#f0e6d2"/><polygon points="430,260 504,206 578,260" fill="#5a6b7d"/>${w?`<polygon points="430,260 504,206 578,260 570,260 504,213 438,260" fill="${sn}"/>`:''}<rect x="538" y="214" width="14" height="30" fill="#8a5a44"/><g class="puff"><circle cx="545" cy="208" r="5" fill="#ddd"/></g><rect x="568" y="282" width="34" height="58" fill="#e2d6bf"/><rect x="572" y="296" width="26" height="44" fill="#b9ad96"/><rect x="494" y="300" width="22" height="40" fill="#5a3e2e"/>${wins(452,272,4,1,20,16,30,0,.6,'#ffe7a0','#8aa0b5',1)}`;top=198}
+ else{s=`<rect x="428" y="250" width="170" height="90" fill="#fbfaf6"/><rect x="460" y="206" width="110" height="46" fill="#f2efe8"/><rect x="424" y="246" width="178" height="6" fill="${w?sn:'#c9c3b6'}"/><rect x="456" y="202" width="118" height="6" fill="${w?sn:'#c9c3b6'}"/><rect x="438" y="262" width="70" height="40" fill="#9fd3f0"/><rect x="520" y="262" width="66" height="40" fill="#9fd3f0"/><rect x="470" y="214" width="86" height="28" fill="#bfe5fa"/><rect x="500" y="306" width="26" height="34" fill="#8a6a4a"/><path d="M432,340 q-6,-30 4,-48 M436,292 q10,-6 20,2 M436,292 q-12,-4 -18,6" stroke="#3f8f3a" stroke-width="4" fill="none"/>`;top=194}
+ if(S.roomLet&&S.home.own)s+=`<rect x="540" y="310" width="44" height="16" rx="2" fill="#fff"/><text x="562" y="322" text-anchor="middle" font-size="8" font-weight="700" fill="#1b2532">ROOM LET</text>`;
+ const name=S.home.own?HOMES[S.home.tier].n:RENT[S.rentTier].n;
+ return bg('home',s+lbl(510,top,'Home · '+name),'Home, housing and budget');
+}
+function exch(){
+ const m=S.mkt.stocks,n=m.length,last=S.lastRet?S.lastRet.stocks:0,pts=m.slice(-36),lo=Math.min(...pts),hi=Math.max(...pts);
+ const line=pts.map((v,i)=>(632+i*(96/Math.max(1,pts.length-1))).toFixed(1)+','+(288-(v-lo)/((hi-lo)||1)*24).toFixed(1)).join(' ');
+ const up=last>=0,c=up?'#4cc38a':'#ef5b5b';
+ return bg('exchange',`<rect x="618" y="232" width="124" height="108" fill="#3c4656"/><rect x="612" y="226" width="136" height="10" fill="#2c3542"/><rect x="626" y="242" width="108" height="52" rx="3" fill="#0b0f14" stroke="#556"/><text x="632" y="256" font-size="10" fill="#9fb0c0" font-family="monospace">INDEX ${m[n-1].toFixed(0)}</text><text x="728" y="256" font-size="10" text-anchor="end" fill="${c}" font-family="monospace" class="blink">${up?'▲':'▼'}${(Math.abs(last)*100).toFixed(1)}%</text><polyline points="${line}" fill="none" stroke="${c}" stroke-width="1.5"/>${[0,1,2,3].map(i=>`<rect x="${630+i*28}" y="300" width="8" height="40" fill="#5a6678"/>`).join('')}<rect x="664" y="312" width="32" height="28" fill="#2a313c"/>${lbl(680,218,'Stock exchange')}`,'Investing and markets');
+}
+function clinic(){
+ return bg('clinic',`<rect x="766" y="264" width="92" height="76" fill="#f7f9fb"/><rect x="762" y="258" width="100" height="8" fill="#d9e1e8"/><rect x="800" y="274" width="24" height="8" fill="#e04a4a"/><rect x="808" y="266" width="8" height="24" fill="#e04a4a"/>${wins(774,298,2,1,16,14,58,0,.6,'#bfe3ff','#9fb4c6',1)}<rect x="800" y="306" width="24" height="34" fill="#9fd3f0"/>${S.medNow?`<rect x="768" y="322" width="52" height="20" rx="3" fill="#fff" stroke="#ccc"/><rect x="768" y="330" width="52" height="4" fill="#e04a4a"/><rect x="790" y="317" width="8" height="5" fill="#e04a4a" class="blink"/><circle cx="780" cy="343" r="4" fill="#222"/><circle cx="808" cy="343" r="4" fill="#222"/>`:''}${lbl(812,248,'Clinic')}`,'Clinic: health and insurance');
+}
+function park(){
+ const se=SEASON(S.month),cr={spring:['#9bd17a','#f7b6c8'],summer:['#3f8f3a','#57a84f'],autumn:['#e0892e','#c4552b'],winter:null}[se];
+ const tree=(x,h)=>cr?`<rect x="${x-3}" y="${340-h}" width="6" height="${h}" fill="#7a5236"/><circle cx="${x}" cy="${340-h-8}" r="${h*.5}" fill="${cr[0]}"/><circle cx="${x+9}" cy="${340-h+2}" r="${h*.32}" fill="${cr[1]}"/>`:`<rect x="${x-3}" y="${340-h}" width="6" height="${h}" fill="#6b4a32"/><path d="M${x},${350-h} l-14,-16 M${x},${356-h} l12,-18 M${x},${364-h} l-10,-10" stroke="#6b4a32" stroke-width="3"/><ellipse cx="${x}" cy="${338-h}" rx="10" ry="3" fill="#fff"/>`;
+ return bg('park',`<rect x="866" y="318" width="134" height="22" fill="${se==='winter'?'#eef3f6':HILL[se][1]}"/>${tree(888,46)}${tree(984,56)}<rect x="904" y="322" width="34" height="5" fill="#8a5a3a"/><rect x="907" y="327" width="3" height="10" fill="#555"/><rect x="932" y="327" width="3" height="10" fill="#555"/><path d="M944,292 l-6,46 M944,292 l6,46 M968,292 l-6,46 M968,292 l6,46 M940,292 h32" stroke="#c0392b" stroke-width="3" fill="none"/><line x1="956" y1="292" x2="956" y2="318" stroke="#444"/><rect x="949" y="318" width="14" height="3" fill="#444"/>${lbl(933,262,'Park · family')}`,'Park: family and relationships');
+}
+function hairC(a){return a<40?'#4a3020':a<55?'#6b5a4a':a<70?'#a9a9a9':'#ececec'}
+function person(x,y,s,o){
+ const mouth=o.mood>65?'M-4,-55 Q0,-51 4,-55':o.mood<40?'M-4,-53 Q0,-56 4,-53':'M-3.5,-54 L3.5,-54';
+ return `<g transform="translate(${x},${y}) scale(${s})"><rect x="-6" y="-24" width="5" height="24" rx="2" fill="${o.pants}"/><rect x="1" y="-24" width="5" height="24" rx="2" fill="${o.pants}"/><rect x="-13" y="-47" width="5" height="20" rx="2.5" fill="${o.shirt}"/><rect x="8" y="-47" width="5" height="20" rx="2.5" fill="${o.shirt}"/><rect x="-9" y="-50" width="18" height="28" rx="6" fill="${o.shirt}"/><circle cx="-10.5" cy="-26" r="2.6" fill="${o.skin}"/><circle cx="10.5" cy="-26" r="2.6" fill="${o.skin}"/><circle cx="0" cy="-60" r="10" fill="${o.skin}"/><path d="M-10,-61 a10,10 0 0 1 20,0 q-10,-6 -20,0z" fill="${o.hair}"/>${o.long?`<path d="M-10,-61 q-2,10 1,14 M10,-61 q2,10 -1,14" stroke="${o.hair}" stroke-width="4" fill="none"/>`:''}<circle cx="-3.5" cy="-60" r="1.3" fill="#222"/><circle cx="3.5" cy="-60" r="1.3" fill="#222"/>${o.glasses?'<circle cx="-3.5" cy="-60" r="3" fill="none" stroke="#333" stroke-width=".8"/><circle cx="3.5" cy="-60" r="3" fill="none" stroke="#333" stroke-width=".8"/>':''}<path d="${mouth}" stroke="#6b3a2a" stroke-width="1.4" fill="none" stroke-linecap="round"/>${o.cane?'<line x1="12" y1="-28" x2="16" y2="0" stroke="#7a5236" stroke-width="2.5"/>':''}</g>`;
+}
+function baby(x,y){return `<g transform="translate(${x},${y})"><path d="M-12,-20 h22 a10,10 0 0 1 -10,12 h-12z" fill="#5aa9f0"/><path d="M-12,-20 a12,12 0 0 1 14,-12 v12z" fill="#3d86c6"/><circle cx="-8" cy="-3" r="3" fill="#222"/><circle cx="6" cy="-3" r="3" fill="#222"/><line x1="10" y1="-20" x2="16" y2="-30" stroke="#444" stroke-width="2"/></g>`}
+function people(){
+ const a=ageY(),y=346,shirt=S.retired?'#9a8a6a':S.studying?'#c05a8a':S.employed?SHIRT[S.field]:'#7d8fa3';
+ let s=person(500,y,1,{shirt,pants:'#34495e',skin:S.health<35?'#e3d3c4':'#f1c7a0',hair:hairC(a),mood:S.happy,glasses:a>=50,cane:a>=78});
+ if(S.partner)s+=person(528,y,.97,{shirt:'#d46a8c',pants:'#4a3a5a',skin:'#d9a982',hair:hairC(a),mood:S.happy+5,long:true,glasses:a>=55,cane:a>=80});
+ const pos=[472,452,550,570];
+ S.kids.forEach((k,i)=>{const ky=k/12;s+=ky<2?baby(pos[i],y):person(pos[i],y,.42+Math.min(ky,17)/17*.45,{shirt:['#f0b43c','#5aa9f0','#4cc38a','#c06cf0'][i],pants:'#3b4a5a',skin:'#f1c7a0',hair:'#4a3020',mood:70,long:i%2===1})});
+ return `<g class="bld" onclick="openPanel('park')"><title>You and your family</title>${s}</g>`;
+}
+function car(){
+ const t=S.budget.transport;
+ if(t===0)return `<g transform="translate(588,346)"><circle cx="0" cy="-8" r="8" fill="none" stroke="#333" stroke-width="2"/><circle cx="24" cy="-8" r="8" fill="none" stroke="#333" stroke-width="2"/><path d="M0,-8 L10,-20 L24,-8 M10,-20 h10 M8,-24 h6" stroke="#e05a4a" stroke-width="2.5" fill="none"/></g>`;
+ const c=t===2?'#d7383d':'#8a9099';
+ return `<g transform="translate(548,356)"><rect x="0" y="6" width="58" height="14" rx="5" fill="${c}"/><path d="M10,6 L18,-4 H42 L50,6Z" fill="${c}"/><path d="M14,6 L20,-1 H29 V6Z M32,6 V-1 H40 L46,6Z" fill="#bfe3ff"/><circle cx="14" cy="21" r="5" fill="#222"/><circle cx="46" cy="21" r="5" fill="#222"/>${t===2?'<rect x="52" y="9" width="5" height="3" fill="#ffe08a"/>':'<circle cx="30" cy="14" r="2.5" fill="#7a5236"/>'}</g>`;
+}
+function traffic(){
+ const n=REG[S.regime].traffic,cols=['#e05a4a','#5aa9f0','#f0b43c','#4cc38a','#c06cf0','#e8e8e8'];let s='';
+ for(let i=0;i<n;i++){const L=i%2===0,y=L?382:402,d=8+(i*3.7)%7,del=-((i*2.9)%d),c=cols[i%cols.length];
+  s+=`<g class="${L?'carL':'carR'}" style="animation-duration:${d.toFixed(1)}s;animation-delay:${del.toFixed(1)}s"><g transform="translate(0,${y})${L?' scale(-1,1)':''}"><rect x="-23" y="2" width="46" height="12" rx="4" fill="${c}"/><path d="M-14,2 L-8,-6 H8 L14,2Z" fill="${c}"/><path d="M-11,2 L-6,-3 H-1 V2Z M2,2 V-3 H6 L11,2Z" fill="#cfe9ff"/><circle cx="-12" cy="15" r="3.5" fill="#222"/><circle cx="12" cy="15" r="3.5" fill="#222"/></g></g>`}
+ return s;
+}
+function weather(se){
+ let s='';
+ if(se==='winter')for(let i=0;i<55;i++){const x=(i*73)%1000,d=6+(i%7),del=-((i*1.3)%d);s+=`<g class="fall" style="animation-duration:${d}s;animation-delay:${del.toFixed(1)}s"><circle cx="${x}" cy="0" r="${1.5+(i%3)}" fill="#fff" opacity=".9"/></g>`}
+ else if(S.rain)for(let i=0;i<70;i++){const x=(i*59)%1000,d=.7+(i%5)*.12,del=-((i*.17)%d);s+=`<g class="fall" style="animation-duration:${d.toFixed(2)}s;animation-delay:${del.toFixed(2)}s"><line x1="${x}" y1="0" x2="${x-3}" y2="12" stroke="#9ec7e6" stroke-width="1.4" opacity=".8"/></g>`}
+ else if(se==='autumn')for(let i=0;i<16;i++){const x=(i*97)%1000,d=7+(i%5),del=-((i*1.9)%d);s+=`<g class="fall" style="animation-duration:${d}s;animation-delay:${del.toFixed(1)}s"><ellipse cx="${x}" cy="0" rx="4" ry="2.4" fill="${i%2?'#e0892e':'#c4552b'}"/></g>`}
+ else if(se==='summer')s=`<g class="cloud" style="animation-duration:40s"><path d="M0,120 q6,-6 12,0 q6,-6 12,0 M60,96 q5,-5 10,0 q5,-5 10,0" stroke="#333" stroke-width="1.5" fill="none"/></g>`;
+ return s;
+}
+function fx(){
+ if(!S.last||S.phase!=='play')return '';
+ const f=S.last.flow,c=f>=0?'#4cc38a':'#ef5b5b';
+ return `<text x="510" y="186" text-anchor="middle" font-size="18" font-weight="700" fill="${c}" stroke="#0e1319" stroke-width="3" paint-order="stroke" class="rise">${f>=0?'+':''}${money(f)}</text>${S.fxEmoji?`<text x="500" y="268" text-anchor="middle" font-size="26" class="rise">${S.fxEmoji}</text>`:''}`;
+}
+
+/* ================= charts ================= */
+function ds(n,max){if(n<=max)return Array.from({length:n},(_,i)=>i);const out=[];for(let i=0;i<max;i++)out.push(Math.floor(i*(n-1)/(max-1)));return out}
+function lineChart(series,o){
+ o=o||{};const w=600,h=o.h||200,pad=24,idx=ds(series[0].v.length,300),n=idx.length;
+ const ser=series.map(s=>idx.map(i=>s.v[i])),all=ser.flat(),lo=Math.min(...all),hi=Math.max(...all);
+ const f=o.log?(x=>Math.log(Math.max(x,1e-6))):(x=>x),a=f(lo),b=f(hi);
+ const X=i=>pad+i*(w-2*pad)/Math.max(1,n-1),Y=v=>h-pad-((f(v)-a)/((b-a)||1))*(h-2*pad);
+ let s=`<svg class="chart" viewBox="0 0 ${w} ${h}">`;
+ if(o.shade){const bw=(w-2*pad)/Math.max(1,n-1);idx.forEach((ix,i)=>{if(o.shade[ix])s+=`<rect x="${(X(i)-bw/2).toFixed(1)}" y="0" width="${bw.toFixed(1)}" height="${h}" fill="#ef5b5b" opacity=".14"/>`})}
+ ser.forEach((v,k)=>{s+=`<polyline fill="none" stroke="${series[k].color}" stroke-width="1.8" points="${v.map((yv,i)=>X(i).toFixed(1)+','+Y(yv).toFixed(1)).join(' ')}"/>`});
+ const fm=o.fmt||(x=>x.toFixed(0));
+ s+=`<text x="4" y="13" fill="#8a97a6" font-size="11">${fm(hi)}</text><text x="4" y="${h-5}" fill="#8a97a6" font-size="11">${fm(lo)}</text><text x="${w/2}" y="${h-5}" fill="#8a97a6" font-size="11" text-anchor="middle">age 18 → ${ageY()}</text>`;
+ return s+'</svg>';
+}
+
+/* ================= UI pieces ================= */
+function optBtns(fn,key,list,cur){return '<div class="opts">'+list.map(([v,l])=>`<button class="${String(v)===String(cur)?'on':''}" onclick="${fn}('${key}',${typeof v==='string'?`'${v}'`:v})">${l}</button>`).join('')+'</div>'}
+function slider(name,min,max,val,unit){return `<input type="range" min="${min}" max="${max}" value="${val}" oninput="this.nextElementSibling.textContent=this.value+'${unit}'" onchange="setOpt('${name}',this.value)"> <span>${val}${unit}</span>`}
+function check(name,val,label){return `<label><input type="checkbox" ${val?'checked':''} onchange="setOpt('${name}',this.checked)"> ${label}</label>`}
+function tr2(a,b){return `<tr><td>${a}</td><td class="n">${b}</td></tr>`}
+function meter(v,c,w){return `<div class="meter" style="width:${w||72}px"><i style="width:${clamp(v,0,100)}%;background:${c}"></i></div>`}
+
+function render(){renderLive();renderPanel();renderModal()}
+function renderLive(){renderHud();renderScene();renderControls();renderBelow();renderToasts()}
+function renderHud(){
+ if(S.phase==='start'){$('hud').innerHTML='<h1>Life Ledger</h1><span class="muted">A whole life, one month at a time</span>';return}
+ const L=S.last,flow=L?L.flow:0;
+ $('hud').innerHTML=`<h1>Life Ledger</h1>
+ <div class="st"><span>${MONTHS[S.month]} · ${REG[S.regime].name}</span><b>Age ${ageY()}<span class="muted" style="display:inline;font-size:12px"> ${S.ageM%12}m</span></b></div>
+ <div class="st"><span>Cash</span><b>${money(S.cash)}</b></div>
+ <div class="st"><span>Net worth</span><b>${money(nw())}</b></div>
+ <div class="st"><span>Last month</span><b class="${flow>=0?'good':'bad'}">${flow>=0?'+':''}${money(flow)}</b></div>
+ <div class="st"><span>Health ${Math.round(S.health)}</span>${meter(S.health,'#4cc38a')}</div>
+ <div class="st"><span>Happiness ${Math.round(S.happy)}</span>${meter(S.happy,'#f0b43c')}</div>
+ <div class="hud-r"><button onclick="openPanel('ledger')">📒 Ledger</button><button onclick="newGame()">New life</button></div>`;
+}
+function renderControls(){
+ const c=$('controls');
+ if(S.phase!=='play'){c.style.display='none';return}
+ c.style.display='flex';
+ if(runTimer){c.innerHTML='<span class="muted">Time is passing…</span><button class="pri" onclick="stopRun()">⏸ Stop</button>';return}
+ const warn=!S.studying&&!S.retired&&!S.employed&&!S.field?'<span class="warn">No job yet: click the Job Centre.</span>':'';
+ c.innerHTML=`${warn}<button class="pri" onclick="advance(1)">▶ 1 month</button><button onclick="advance(3)">▶▶ 3 months</button><button onclick="advance(12)">⏩ 1 year</button><button onclick="advance(0,true)">⏭ Until something happens</button><label class="muted"><input type="checkbox" ${S.pauseOnEvents?'checked':''} onchange="setOpt('pauseOnEvents',this.checked)"> Pause on big events</label>`;
+}
+function renderBelow(){
+ const b=$('below');
+ if(S.phase!=='play'){b.innerHTML='';return}
+ const L=S.last;
+ const top=L?Object.entries(L.ex).filter(e=>e[1]>.5).sort((a,c)=>c[1]-a[1]).slice(0,5).map(([k,v])=>tr2(EX_N[k],money(-v))).join(''):'';
+ b.innerHTML=`<div class="card"><h3>Last month</h3>${L?`<table>${tr2('Income',money(sum(L.inc)))}${tr2('Taxes withheld',money(-L.tax))}${top}${tr2('<b>Cash change</b>',`<b class="${L.flow>=0?'good':'bad'}">${money(L.flow)}</b>`)}</table><p class="muted"><a href="#" onclick="openPanel('ledger');return false" style="color:var(--accent)">Full report →</a></p>`:'<p class="muted">Click a building to manage that part of your life, then press ▶ to live a month.</p>'}</div>
+ <div class="card"><h3>Recent events</h3><div class="log">${S.log.slice(0,8).map(x=>`<div>${x}</div>`).join('')||'<div class="muted">Nothing yet.</div>'}</div></div>
+ <div class="card"><h3>Around town</h3><p class="muted">🏫 School: education · 💼 Work: career and side gigs · 🏦 Bank: debt, mortgage, taxes · 🏠 Home: housing and budget · 📈 Exchange: investing · 🏥 Clinic: health · 🌳 Park: family.</p><p class="muted">The town changes with the seasons, the economy, your home, your job and your family.</p></div>`;
+}
+function renderToasts(){const now=Date.now();toastQ=toastQ.filter(x=>now-x.at<6000);$('toasts').innerHTML=toastQ.map(x=>`<div class="toast">${x.t}</div>`).join('')}
+const PANELS={home:['🏠 Home & budget',pHome],work:['💼 Work',pWork],bank:['🏦 Bank',pBank],exchange:['📈 Stock exchange',pExch],clinic:['🏥 Clinic',pClinic],park:['🌳 Family',pPark],school:['🏫 School',pSchool],ledger:['📒 Ledger',pLedger]};
+function renderPanel(){
+ const p=$('panel');
+ if(!S.panel||S.phase!=='play'||!PANELS[S.panel]){p.classList.remove('open');return}
+ const st=p.scrollTop,P=PANELS[S.panel];
+ p.innerHTML=`<div class="ph"><h2>${P[0]}</h2><button onclick="closePanel()">✕</button></div>`+P[1]();
+ p.classList.add('open');p.scrollTop=st;
+}
+function renderModal(){
+ const m=$('modal');let h='';
+ if(S.phase==='start')h=startHTML();else if(S.phase==='dead')h=deathHTML();else if(S.decision)h=decisionHTML();
+ m.innerHTML=h?'<div class="box">'+h+'</div>':'';m.classList.toggle('show',!!h);
+}
+function startHTML(){return `<div class="big">🌱</div><h2>You are 18.</h2><p>You have $3,000 and a whole life ahead: somewhere between 60 and 120 years, but you won't know how long. Each turn is one month. Jobs, bills, markets, housing, family and health all compound.</p><p class="muted">Click buildings in town to manage your life, then let time pass by a month, a quarter, a year, or until something happens.</p><div class="grid3"><button class="pri" onclick="startGame('work')">💼 Start working<br><small>Retail or trades, no debt</small></button><button onclick="startGame('voc')">🛠 Vocational school<br><small class="muted">2 years · opens public service</small></button><button onclick="startGame('uni')">🎓 University<br><small class="muted">4 years · opens tech, health, finance</small></button></div>`}
+function decisionHTML(){const d=S.decision;return `<div class="big">${d.icon}</div><h2>${d.title}</h2><p>${d.text}</p><div class="choice">${d.opts.map((o,i)=>`<button ${o.dis?'disabled':''} class="${i===0&&!d.neutral&&!o.dis?'pri':''}" onclick="decide(${i})">${o.l}${o.dis?' · you do not qualify':''}</button>`).join('')}</div>`}
+function deathHTML(){
+ const n=S.stats.months||1,happy=S.stats.happy/n,health=S.stats.health/n,sec=100*(1-S.stats.stressM/n);
+ const real=nw()/S.pi,legacy=clamp(25*Math.log10(1+Math.max(0,real)/10000),0,100),score=.4*happy+.25*sec+.2*legacy+.15*health;
+ const grade=score>=75?'A':score>=65?'B':score>=55?'C':score>=45?'D':'F';
+ return `<div class="big">🕊️</div><h2>You died at ${ageY()}. Grade ${grade} (${Math.round(score)}/100)</h2><table>${tr2('Average happiness',happy.toFixed(0)+'/100')}${tr2('Financial security (time without money stress)',sec.toFixed(0)+'/100')}${tr2('Legacy: '+money(nw())+' ('+money(real)+' in age-18 dollars)',legacy.toFixed(0)+'/100')}${tr2('Average health',health.toFixed(0)+'/100')}${tr2('Years worked',(S.workM/12).toFixed(0))}${tr2('Bankruptcies',S.bankrupt)}</table><p class="muted">Score = 40% happiness, 25% security, 20% legacy, 15% health.</p><h3>Net worth over your life (age-18 dollars)</h3>${lineChart([{color:'#4cc38a',v:S.hist}],{h:160,fmt:money})}<div class="choice"><button class="pri" onclick="newGame()">Live another life</button></div><h3>Life log</h3><div class="log">${S.log.map(x=>`<div>${x}</div>`).join('')}</div>`;
+}
+
+/* ================= panels ================= */
+function pWork(){
+ const a=ageY();let st;
+ if(S.studying)st=`Studying (${EDU[S.eduTarget].n.toLowerCase()}), ${S.eduLeftM} months left. You earn about ${money(1000*S.pi)}/mo part-time.`;
+ else if(S.retired)st=`Retired. Pension ${money(pensionAnnual()*(a>=65?1:a>=62?.75:0)/12)}/mo${a<62?' (starts at 62)':''}.`;
+ else if(S.employed)st=`<b>${FIELDS[S.field].name}</b>, level ${S.level+1}. Salary ${money(S.salary)}/yr (${money(S.salary/12)}/mo). Skill ${Math.round(S.skill)}/100.${S.probation>0?` <span class="warn">Probation: ${S.probation} months.</span>`:''}`;
+ else if(S.field)st=`<span class="warn">Unemployed for ${S.unempM} months.</span> Benefit ${money((S.unempM<6?.4:S.unempM<18?.12:0)*S.lastSalary/12)}/mo. About ${pct(hireChance()*.22,0)} a month to be rehired, or apply below.`;
+ else st='<span class="warn">No job yet.</span> Apply below. You get 3 applications a month.';
+ const focus=S.employed?`<h3>Work focus</h3>${optBtns('setOpt','work',[['coast','Coast'],['push','Push (+6% pay)'],['train','Train ($250/mo)']],S.work)}<p class="muted">Pushing pays more and lowers layoff risk, but costs health and happiness. Training builds skill faster, and skill drives promotions.</p>`:'';
+ const sides=SIDE.map(g=>[g.k,g.n+(g.h?` · ${g.h}h/wk · ~${money(g.h*4.33*g.pay*S.pi)}/mo`:'')+(sideOk(g)?'':' 🔒')]);
+ const rows=Object.entries(FIELDS).map(([k,f])=>{const ok=S.edu>=f.edu&&!S.studying&&!S.retired;return `<tr><td>${f.name}${S.field===k?' <span class="good">●</span>':''}<div class="muted">${EDU[f.edu].n} · ${f.g>=.02?'fast':f.g>=.01?'medium':'slow'} growth · ${f.stab<=.6?'very secure':f.stab<=1?'average security':'cyclical'} · bonus ~${pct(f.bonus,0)}</div></td><td class="n">${money(f.start*S.pi)}</td><td class="n"><button ${ok&&S.applies<3?'':'disabled'} onclick="applyJob('${k}')">Apply</button></td></tr>`}).join('');
+ const ret=!S.retired&&a>=40?`<h3>Retirement</h3><p class="muted">Pension pays from 65 (75% from 62) based on your career earnings: about ${money(pensionAnnual()/12)}/mo so far. You must retire at 70.</p><button onclick="if(confirm('Retire now?'))retireNow()">Retire now</button>`:'';
+ return `<p>${st}</p>${focus}<h3>Side gig</h3>${optBtns('setSide','side',sides,S.side)}<p class="muted">No tax is withheld on side income, so you settle it in April. Hours cost happiness and a little health. Delivery needs a car, tutoring a certificate, freelancing a degree and skill 40+.</p><h3>Careers</h3><p class="muted">Applications left this month: ${3-S.applies}.</p><table><tr><th>Field</th><th class="n">Start pay</th><th></th></tr>${rows}</table>${ret}`;
+}
+function pSchool(){
+ const st=S.studying?`<p>You are studying for a <b>${EDU[S.eduTarget].n.toLowerCase()}</b>: ${S.eduLeftM} months left. Tuition of ${money(EDU[S.eduTarget].cost*S.pi/12)}/mo goes on your student loan (5% interest; repayments start when you finish). If your part-time pay doesn't cover living costs, a maintenance loan tops it up by up to ${money(1000*S.pi)}/mo.</p>`:`<p>Your education: <b>${EDU[S.edu].n}</b>.</p>`;
+ const opts=[1,2].filter(t=>S.edu<t&&!S.studying&&!S.retired).map(t=>`<button onclick="enroll(${t})">${EDU[t].n}: ${EDU[t].years} years, ~${money(EDU[t].cost*S.pi)}/yr loan</button>`).join(' ');
+ return st+(opts?`<h3>Go back to school</h3><p class="muted">You stop working while you study. Higher education opens better-paid careers.</p><div class="opts">${opts}</div>`:'')+`<h3>What each level opens</h3><table>${EDU.map((e,i)=>tr2(e.n,'<span class="muted">'+Object.values(FIELDS).filter(f=>f.edu===i).map(f=>f.name).join(', ')+'</span>')).join('')}</table>`;
+}
+function pBank(){
+ const h=S.home;let mort='<p class="muted">You have no mortgage. Buy a home from the Home panel.</p>';
+ if(h.own&&h.mort>0){
+  const fix=inFix()?`Fixed until age ${Math.floor(h.fixEnd/12)} (${h.fixEnd-S.ageM} months). Leaving early costs 3%.`:'';
+  mort=`<table>${tr2('Product',MORT[h.product]?MORT[h.product].n:'<span class="warn">Standard variable rate</span>')}${tr2('Balance',money(h.mort))}${tr2('Rate',pct(h.rate,2))}${tr2('Monthly payment',money(h.pmt))}${tr2('Term left',Math.floor(h.termM/12)+' yrs '+h.termM%12+' mo')}${tr2('Home value',money(h.value))}${tr2('Equity',money(h.value-h.mort))}</table><p class="muted">${fix}${h.product==='svr'?'You are on the expensive standard variable rate. Remortgaging could save money.':''}</p>
+  <h3>Overpay</h3><div class="opts">${[1000,5000,20000].map(x=>`<button onclick="overpay(${(x*S.pi).toFixed(0)})">${money(x*S.pi)}</button>`).join('')}</div><p class="muted">${inFix()?'You can overpay 10% of the balance each year for free; above that there is a 3% charge.':'No overpayment charges on this product.'}</p>
+  <h3>Remortgage</h3><div class="opts">${['fix5','fix30','variable'].map(p=>`<button ${h.product===p?'disabled':''} onclick="remortgage('${p}')">${MORT[p].n} ${pct(newRate(p,h.extra),2)}</button>`).join('')}</div><p class="muted">Costs ${money(1000*S.pi)}${inFix()?` plus a ${money(.03*h.mort)} exit charge`:''}. You must pass a stress test at the new rate +3%.</p>`;
+ }else if(h.own)mort='<p class="good">Your home is mortgage-free.</p>';
+ const debts=`<table>${['student','card'].map(k=>`<tr><td>${k==='card'?'Credit card (18% APR)':'Student loan (5%)'}</td><td class="n">${money(S.debt[k])}</td><td class="n"><button ${S.debt[k]>0&&S.cash>0?'':'disabled'} onclick="payDebt('${k}')">Pay from cash</button></td></tr>`).join('')}</table>`;
+ const y=S.ytd;
+ const tax=`<table>${tr2('Withheld so far this year',money(y.withheld))}${tr2('Side and rental income (not withheld)',money(y.side+y.room))}${tr2('Dividends and interest this year (taxed 15%)',money(y.gains))}${S.taxDue!==null?tr2('Settles in April',S.taxDue>=0?`<span class="bad">you owe ${money(S.taxDue)}</span>`:`<span class="good">refund ${money(-S.taxDue)}</span>`):''}</table>`;
+ return `<h3>Cash rules</h3><div class="row"><label>Emergency fund</label>${slider('emergencyMonths',0,12,S.emergencyMonths,' mo')}</div><div class="row">${check('payDebt',S.payDebt,'Prepay the student loan with surplus')}</div><div class="row">${check('investSurplus',S.investSurplus,'Invest surplus above the emergency fund')}</div><p class="muted">Each month, money above your emergency fund pays off card debt first, then the student loan (if ticked), then is invested. Shortfalls come from cash, then investments, then the credit card.</p>
+ <h3>Debts</h3>${debts}<h3>Mortgage</h3>${mort}<h3>Taxes</h3>${tax}<p class="muted">Wages and pensions have tax withheld monthly, and bonuses at 25%. Everything is settled in April.</p><h3>Rates today</h3><div class="chips"><span class="chip">Base rate ${pct(S.rate,2)}</span><span class="chip">Inflation ${pct(S.infl)}</span><span class="chip">Savings ${pct(S.rate*.6,2)}</span></div>`;
+}
+function pHome(){
+ const h=S.home;let housing;
+ if(h.own){housing=`<p>You own a <b>${HOMES[h.tier].n.toLowerCase()}</b> worth ${money(h.value)}${h.mort>0?` with ${money(h.mort)} left on the mortgage`:', mortgage-free'}. Upkeep, property tax and insurance cost about ${money(h.value*.0235/12)}/mo.</p><div class="opts"><button onclick="if(confirm('Sell your home? Selling costs 6% of its value.'))sellHome()">Sell home</button>${HOMES[h.tier].room?`<button class="${S.roomLet?'on':''}" onclick="setOpt('roomLet',${!S.roomLet})">${S.roomLet?'Stop letting the spare room':'Let the spare room (~'+money(650*S.pi*S.rel.housing)+'/mo)'}</button>`:''}</div><p class="muted">Mortgage details are at the Bank.</p>`}
+ else{
+  housing=`<p>Renting a <b>${RENT[S.rentTier].n.toLowerCase()}</b> at ${money(S.rentPay)}/mo. The lease renews at market rent in ${S.leaseM} months.</p><div class="opts">${RENT.map((r,i)=>`<button class="${S.rentTier===i?'on':''}" onclick="moveRent(${i})">${r.n} ${money(r.r*S.pi*S.rel.housing)}/mo</button>`).join('')}</div><p class="muted">Moving costs ${money(1500*S.pi)}, plus a month's rent to break a lease.</p>`;
+  const p=S.mortPick,ex=S.down<.1?.005:0,r=newRate(p,ex),n=S.mortTerm*12;
+  housing+=`<h3>Buy a home</h3><div class="row"><label>Mortgage</label>${optBtns('setOpt','mortPick',Object.keys(MORT).map(k=>[k,MORT[k].n+' '+pct(newRate(k,ex),2)]),p)}</div><p class="muted">${MORT[p].desc}</p><div class="row"><label>Deposit</label>${optBtns('setOpt','down',[[.05,'5%'],[.1,'10%'],[.2,'20%']],S.down)}</div><div class="row"><label>Term</label>${optBtns('setOpt','mortTerm',[[25,'25 years'],[30,'30 years']],S.mortTerm)}</div>
+  <table>${HOMES.map((x,i)=>{const v=x.p*S.reIdx,m=v*(1-S.down),pm=annuity(m,r,n),ok=affordable(m,r,n),need=v*S.down+v*.03+1000*S.pi,cashOk=S.cash+sum(S.taxable)>=need;return `<tr><td>${x.n}<div class="muted">${money(v)} · ${money(pm)}/mo · ${money(need)} upfront</div>${ok?'':'<div class="muted bad">Income too low for the stress test</div>'}${cashOk?'':'<div class="muted bad">Not enough savings for deposit and fees</div>'}</td><td class="n"><button ${ok&&cashOk?'':'disabled'} onclick="buyHome(${i})">Buy</button></td></tr>`}).join('')}</table><p class="muted">Deposits under 20% add mortgage insurance; 5% deposits also pay a higher rate. Lenders check you could still pay if rates rose 3%.</p>`;
+ }
+ const B=S.budget;
+ const cats=Object.keys(BUD).map(k=>`<div class="row"><label>${BUD[k].n}</label>${optBtns('setBudget',k,BUD[k].opts.map((o,i)=>[i,o[0]+' '+money(costOf(k,i))+(k==='travel'&&i>0?'/mo*':'')]),B[k])}</div>`).join('');
+ const subs=SUBS.map(s=>`<label style="display:inline-block;margin:2px 12px 2px 0"><input type="checkbox" ${S.subs[s.k]?'checked':''} onchange="toggleSub('${s.k}')"> ${s.n} ${money(s.c*S.pi*S.rel.goods)}</label>`).join('');
+ const total=Object.keys(BUD).reduce((a,k)=>a+costOf(k,B[k]),0)+SUBS.filter(s=>S.subs[s.k]).reduce((a,s)=>a+s.c*S.pi*S.rel.goods,0);
+ return `<h3>Housing</h3>${housing}<h3>Monthly budget</h3>${cats}<p class="muted">*Travel is paid each July. Household & extras is a share of your take-home pay (toiletries, gifts, eating out, home goods), so it grows as you earn more. Groceries scale with your household. Food, energy and goods prices drift apart from overall inflation.</p><h3>Subscriptions</h3><div>${subs}</div><p>Lifestyle spending: <b>${money(total)}/mo</b>, not counting housing, utilities, children and health.</p>`;
+}
+function pExch(){
+ const R=REG[S.regime],m=S.mkt,lr=S.lastRet||{};
+ const ch=lineChart([{color:'#4cc38a',v:m.stocks},{color:'#5aa9f0',v:m.bonds},{color:'#f0b43c',v:m.home},{color:'#c9a227',v:m.gold},{color:'#c06cf0',v:m.crypto}],{log:true,h:220,shade:S.regH.map(r=>r==='recession')});
+ const legend=[['Stocks','#4cc38a'],['Bonds','#5aa9f0'],['Homes','#f0b43c'],['Gold','#c9a227'],['Crypto','#c06cf0']].map(a=>`<span><i style="background:${a[1]}"></i>${a[0]}</span>`).join('');
+ const sliders=ASSETS.filter(a=>a.k!=='cash').map(a=>`<div class="row"><label>${a.name}</label><input type="range" min="0" max="100" value="${S.alloc[a.k]}" oninput="this.nextElementSibling.textContent=this.value+'%'" onchange="setAlloc('${a.k}',this.value)"> <span>${S.alloc[a.k]}%</span></div>`).join('');
+ const rows=ASSETS.map(a=>`<tr><td>${a.name}<div class="muted">${a.note}</div></td><td class="n">${lr[a.k]===undefined?'-':`<span class="${lr[a.k]>=0?'good':'bad'}">${pct(lr[a.k])}</span>`}</td><td class="n">${money(S.taxable[a.k])}</td><td class="n">${money(S.retire[a.k])}</td></tr>`).join('');
+ return `<div class="chips"><span class="chip">${R.name} · ${S.regM} months</span><span class="chip">Inflation ${pct(S.infl)}</span><span class="chip">Base rate ${pct(S.rate,2)}</span><span class="chip">Volatility ${S.volMult.toFixed(2)}×</span></div>
+ <h3>Markets since you were 18</h3>${ch}<div class="legend">${legend}</div><p class="muted">Log scale; red bands are recessions. Volatility clusters, and crashes are deeper and more frequent than a bell curve predicts.</p>
+ <h3>Retirement saving</h3><div class="row"><label>From each paycheck</label>${slider('contribPct',0,25,S.contribPct,'%')}</div><p class="muted">Pre-tax. Your employer adds 50% of what you save, up to 6% of pay. Withdrawals are taxed, with a heavy penalty before 60.</p>
+ <h3>Allocation</h3><div class="opts">${Object.keys(PRESETS).map(n=>`<button onclick="setPreset('${n}')">${n}</button>`).join('')}</div>${sliders}<p class="muted">Cash in accounts: ${cashPct()}%. New money is invested at these weights. Accounts rebalance every January; changes rebalance next month, with trading costs.</p><div class="row">${check('reinvest',S.reinvest,'Reinvest dividends (otherwise they are paid to you as income)')}</div>
+ <h3>Balances</h3><p>Taxable <b>${money(sum(S.taxable))}</b> · Retirement <b>${money(sum(S.retire))}</b></p><table><tr><th>Asset</th><th class="n">Last month</th><th class="n">Taxable</th><th class="n">Retirement</th></tr>${rows}</table>`;
+}
+function pClinic(){
+ const a=ageY();
+ return `<div class="row"><label>Health</label>${meter(S.health,'#4cc38a',160)} ${Math.round(S.health)}/100</div><div class="row"><label>Happiness</label>${meter(S.happy,'#f0b43c',160)} ${Math.round(S.happy)}/100</div>
+ <h3>Health insurance</h3>${optBtns('setOpt','insured',[[true,'Insured ~'+money(230*S.pi*S.rel.health*(1+Math.max(0,a-30)/50))+'/adult/mo'],[false,'Uninsured']],S.insured)}<p class="muted">Insurance caps an emergency bill at 20% (max ${money(5000*S.pi)}) and covers most routine care.</p>
+ <h3>Wellness</h3>${optBtns('setOpt','wellness',WELL.map((w,i)=>[i,w.n+(w.c?' '+money(w.c*S.pi)+'/mo':'')]),S.wellness)}
+ <p class="muted">Health declines faster with age. Groceries, the gym, work stress, side-gig hours and debt all nudge it. Poor health quietly shortens a life that ends somewhere between 60 and 120.</p>`;
+}
+function pPark(){
+ const a=ageY(),kids=S.kids.length?S.kids.map(k=>Math.floor(k/12)+'y').join(', '):'none',preg=S.pend.some(p=>p.kind==='birth');
+ return `<p>Partner: <b>${S.partner?(S.partner.employed?'working, '+money(S.partner.salary)+'/yr':'out of work'):'none'}</b><br>Children: <b>${kids}</b>${preg?' · <span class="good">a baby is on the way</span>':''}${S.care>0?`<br><span class="warn">Caring for a parent: ${S.care} months left.</span>`:''}</p>
+ <div class="opts">${!S.partner?`<button class="${S.dating?'on':''}" ${a>60?'disabled':''} onclick="setOpt('dating',${!S.dating})">${S.dating?'Dating… (stop)':'Start dating (+$100/mo)'}</button>`:''}${S.partner&&!preg&&S.kids.length<4&&a<=46?`<button class="${S.trying?'on':''}" onclick="setOpt('trying',${!S.trying})">${S.trying?'Trying for a baby (stop)':'Try for a baby'}</button>`:''}</div>
+ <p class="muted">A partner brings income, shared costs and happiness. Money stress makes divorce more likely, and divorce splits your assets. Each child costs about ${money(250*S.pi)}/mo, plus ${money(450*S.pi)}/mo childcare under 5, school costs each August, and more groceries.</p>
+ <h3>Mood</h3>${S.mood.length?S.mood.map(m=>`<div class="muted">${m.t||'Mood'}: ${m.v>0?'+':''}${m.v} for ${m.m} more months</div>`).join(''):'<p class="muted">No lingering highs or lows.</p>'}`;
+}
+function pLedger(){
+ const L=S.last;
+ const log=`<h3>Life log</h3><div class="log">${S.log.map(x=>`<div>${x}</div>`).join('')}</div>`;
+ if(!L)return '<p class="muted">Live a month to see your first report.</p>'+log;
+ const gross=sum(L.inc),rate=gross>0?(L.contrib+L.match+Math.max(0,L.flow))/gross:0;
+ const inc=Object.entries(L.inc).filter(e=>e[1]>.5).map(([k,v])=>tr2(INC_N[k],money(v))).join('');
+ const ex=Object.entries(L.ex).filter(e=>e[1]>.5).sort((a,c)=>c[1]-a[1]).map(([k,v])=>tr2(EX_N[k],money(-v))).join('');
+ return `<h3>${MONTHS[L.mo]} report</h3><table><tr><th>Income</th><th class="n">${money(gross)}</th></tr>${inc}</table><table style="margin-top:8px"><tr><th>Spending</th><th class="n">${money(-sum(L.ex))}</th></tr>${ex}${tr2('Taxes withheld',money(-L.tax))}${tr2('Retirement saving (you + employer)',money(L.contrib+L.match))}</table>
+ <p>Cash change <b class="${L.flow>=0?'good':'bad'}">${money(L.flow)}</b> · Savings rate <b>${pct(rate,0)}</b></p>
+ <h3>Net worth (age-18 dollars)</h3>${lineChart([{color:'#4cc38a',v:S.hist.length>1?S.hist:[S.hist[0],S.hist[0]]}],{h:160,fmt:money})}
+ ${S.lastYearTax?`<h3>Last tax year</h3><table>${tr2('Total tax due',money(S.lastYearTax.actual))}${tr2('Withheld',money(S.lastYearTax.withheld))}</table>`:''}${log}`;
+}
+
+/* ================= init ================= */
+S=load();
+if(!S||S.v!==2)S=fresh();
+if(S.budget.misc===undefined)S.budget.misc=1;
+if(S.incEst===undefined)S.incEst=0;
+render();
+if(typeof setInterval!=='undefined')setInterval(renderToasts,1000);
+</script>
+</body>
+</html>
